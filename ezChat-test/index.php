@@ -45,6 +45,28 @@
 	}
 </style>
 
+<body>
+	<div id="leftRegion" class="region padded">
+		<div id="roomInfo">
+		</div>
+
+		<div id="roomList">
+		</div>
+	</div>
+
+	<div id="centerRegion" class="region">
+		
+	</div>
+
+	<div id="rightRegion" class="region padded">
+		<div id="accountInfo">
+		</div>
+
+		<div id="userList" style="flex-grow: 2">
+		</div>
+	</div>
+</body>
+
 <script>
 	// client parameters
 	var userID;
@@ -109,30 +131,9 @@
 		showUserList();
 	}
 
-</script>
+	// functions for retrieving data from backend
 
-<body>
-	<div id="leftRegion" class="region padded">
-		<div id="roomInfo">
-		</div>
-
-		<div id="roomList">
-		</div>
-	</div>
-
-	<div id="centerRegion" class="region">
-		
-	</div>
-
-	<div id="rightRegion" class="region padded">
-		<div id="accountInfo">
-		</div>
-
-		<div id="userList" style="flex-grow: 2">
-		</div>
-	</div>
-</body>
-
-<script>
+	// render content
 	showPage();
+	
 </script>
