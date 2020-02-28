@@ -1,3 +1,12 @@
+<?php
+	$db_host = "sql200.main-hosting.eu";
+	$db_name = "u668413793_ezChat";
+	$db_user = "u668413793_ezChatDev";
+	$db_password = "ezChatDev";
+
+	$db = new mysqli($db_host, $db_user, $db_password, $db_name);
+?>
+
 <title>
 	Welcome to ezChat!
 </title>
