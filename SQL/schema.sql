@@ -18,8 +18,8 @@ create table Rooms(
 	description varchar(128) not null,
 	browsable boolean not null,
 	public boolean not null,
-password varchar(64),
-creatorID int not null,
+	password varchar(64),
+	creatorID int not null,
 	creationDate dateTime not null,
 
 	Foreign key (creatorID) references Users(userID)
@@ -56,6 +56,8 @@ create table Messages(
 	Foreign key (channelID) references Channels(channelID),
 	Foreign key (userID) references Users(UserID)
 );
+
+# Everything below this comment hasn't been added to the db yet
 
 create table PunishmentIndex(
 	punishmentID integer primary key,
