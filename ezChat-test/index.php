@@ -46,34 +46,43 @@
 </style>
 
 <script>
-	// functions for dynamically generating page content
+	// client parameters
+	var userID;
 
+	// functions for dynamically generating page content
+	function showRoomInfo() {
+		var parent = document.getElementById("roomInfo");
+		parent.innerHTML = 
+		`
+		
+		`;
+	}
+	function showRoomList() {
+		var parent = document.getElementById("roomList");
+		parent.innerHTML = 
+		`
+		<div id="dmList">
+			Your DMs
+		</div>
+		<div id="recentRooms">
+			Your Recent Rooms
+		</div>
+		<div id="allRooms">
+			Public Rooms
+		</div>
+		`;
+	}
 	function showAccountInfo() {
 		var parent = document.getElementById("accountInfo");
-		parent.innerHTML = "Account Info";
+		parent.innerHTML = 
+		`
+		Account Info
+		`;
 	}
-
-</script>
-
-<body>
-	<div id="leftRegion" class="region padded">
-		<div id="roomInfo">
-
-		</div>
-		<div id="roomList">
-			<div id="dmList">
-				Your DMs
-			</div>
-			<div id="recentRooms">
-				Your Recent Rooms
-			</div>
-			<div id="allRooms">
-				Public Rooms
-			</div>
-		</div>
-	</div>
-
-	<div id="centerRegion" class="region">
+	function showChat() {
+		var parent = document.getElementById("centerRegion");
+		parent.innerHTML = 
+		`
 		<div id="chatRegion" class="region">
 			<div id="messageStream" class="padded" style="flex-grow: 5">
 				Messages
@@ -82,14 +91,48 @@
 				<textarea style="flex-grow: 1"></textarea>
 			</div>
 		</div>
+		`;
+	}
+	function showUserList() {
+		var parent = document.getElementById("userList");
+		parent.innerHTML =
+		`
+		Other Users
+		`;
+	}
+
+	function showPage() {
+		showRoomInfo();
+		showRoomList();
+		showChat();
+		showAccountInfo();
+		showUserList();
+	}
+
+</script>
+
+<body>
+	<div id="leftRegion" class="region padded">
+		<div id="roomInfo">
+		</div>
+
+		<div id="roomList">
+		</div>
+	</div>
+
+	<div id="centerRegion" class="region">
+		
 	</div>
 
 	<div id="rightRegion" class="region padded">
 		<div id="accountInfo">
-			<script> showAccountInfo(); </script>
 		</div>
+
 		<div id="userList" style="flex-grow: 2">
-			Other Users
 		</div>
 	</div>
 </body>
+
+<script>
+	showPage();
+</script>
