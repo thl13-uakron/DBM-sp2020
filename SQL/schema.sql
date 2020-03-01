@@ -1,3 +1,5 @@
+use ezChat;
+
 create table Users(
 	userID integer primary key,
 	screenName varchar(32) not null
@@ -15,6 +17,7 @@ create table Accounts(
 
 create table Rooms(
 	roomID integer primary key,
+	roomName varchar(32) not null,
 	description varchar(128) not null,
 	browsable boolean not null,
 	public boolean not null,
@@ -30,10 +33,14 @@ create table Rooms(
 
 create table Channels(
 	channelID integer primary key,
+	channelName varchar(24) not null,
+	description varchar(64) not null,
 	roomID integer,
+	creatorID int not null,
 	creationDate dateTime not null,
 	
-	Foreign key (roomID) references Rooms(roomID)
+	Foreign key (roomID) references Rooms(roomID),
+	Foreign key (creatorID) references Users(userID)
 );
 # The roomID is set to null for Direct Message channels, which contain posts intended to be viewed by only a specific user or group of users
 
