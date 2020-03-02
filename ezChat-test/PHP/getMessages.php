@@ -1,9 +1,5 @@
 <?php
-# This script adds a new user to the database, taking the specified screen name for the user
-# and returning the ID of the new user
-
-# initialize result array
-$ajaxResult = array();
+# This script returns the list of messages posted to a channel, taking the ID of that channel
 
 # initialize result array
 $ajaxResult = array();
@@ -16,18 +12,16 @@ if ($db) {
 	$ajaxResult["sqlConnectSuccess"] = true;
 
 	# read parameters
-	$screenName = $_POST["screenName"];
+	$channelID = $_POST["channelID"];
 
 	# execute query
-	if ($db->query("call addUser('$screenName', @p_userID)")) {
-		$queryResult = $db->query("select @p_userID");
-
-		# parse query results
-		$id = $queryResult->fetch_row()[0];
+	$queryResult = $db->query("call getMessages('$channelID')");
+	if ($queryResult) {
+		$messageList = $queryResult->fetch_all(MYSQLI_ASSOC);
 
 		# record data
-		$ajaxResult["userID"] = $id;
 		$ajaxResult["querySuccess"] = true;
+		$ajaxResult["messageList"] = json_encode($messageList);
 	}
 	else {
 		# indicate if errors occur

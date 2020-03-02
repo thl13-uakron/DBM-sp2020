@@ -9,18 +9,32 @@ $ajaxResult = array();
 include "dbAccess.php";
 $db = get_db_connection();
 
-# read parameters
-$username = $_POST["username"];
-$password = $_POST["password"];
+if ($db) {
+	$ajaxResult["sqlConnectSuccess"] = true;
 
-# execute query
-$queryResult = $db->query("select login('$username', '$password')");
+	# read parameters
+	$username = $_POST["username"];
+	$password = $_POST["password"];
 
-# parse query results
-$id = $queryResult->fetch_row()[0];
+	# execute query
+	$queryResult = $db->query("select login('$username', '$password')"); 
+	if ($queryResult) {
+		# parse query results
+		$id = $queryResult->fetch_row()[0];
 
-# return data
-$ajaxResult["id"] = $id;
+		# record data
+		$ajaxResult["querySuccess"] = true;
+		$ajaxResult["userID"] = $id;
+	}
+	else {
+		$ajaxResult["querySuccess"] = false;
+	}
+}
+else {
+	$ajaxResult["sqlConnectSuccess"] = false;
+}
+
+# return results
 echo json_encode($ajaxResult);
 
 ?>

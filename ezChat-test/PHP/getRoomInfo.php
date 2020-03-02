@@ -1,9 +1,6 @@
 <?php
-# This script adds a new user to the database, taking the specified screen name for the user
-# and returning the ID of the new user
-
-# initialize result array
-$ajaxResult = array();
+# This script takes the ID of a room and returns detailed information about it, including the name,
+# description, ID and name of the creator, and date and time of creation
 
 # initialize result array
 $ajaxResult = array();
@@ -16,18 +13,16 @@ if ($db) {
 	$ajaxResult["sqlConnectSuccess"] = true;
 
 	# read parameters
-	$screenName = $_POST["screenName"];
+	$roomID = $_POST["roomID"];
 
 	# execute query
-	if ($db->query("call addUser('$screenName', @p_userID)")) {
-		$queryResult = $db->query("select @p_userID");
-
-		# parse query results
-		$id = $queryResult->fetch_row()[0];
+	$queryResult = $db->query("call getRoomInfo('$roomID')");
+	if ($queryResult) {
+		$roomInfo = $queryResult->fetch_assoc();
 
 		# record data
-		$ajaxResult["userID"] = $id;
 		$ajaxResult["querySuccess"] = true;
+		$ajaxResult["roomInfo"] = json_encode($roomInfo);
 	}
 	else {
 		# indicate if errors occur

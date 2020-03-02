@@ -1,9 +1,5 @@
 <?php
-# This script adds a new user to the database, taking the specified screen name for the user
-# and returning the ID of the new user
-
-# initialize result array
-$ajaxResult = array();
+# This script retrieves a publicly browsable list of rooms
 
 # initialize result array
 $ajaxResult = array();
@@ -15,19 +11,14 @@ $db = get_db_connection();
 if ($db) {
 	$ajaxResult["sqlConnectSuccess"] = true;
 
-	# read parameters
-	$screenName = $_POST["screenName"];
-
 	# execute query
-	if ($db->query("call addUser('$screenName', @p_userID)")) {
-		$queryResult = $db->query("select @p_userID");
-
-		# parse query results
-		$id = $queryResult->fetch_row()[0];
+	$queryResult = $db->query("call getRoomList()");
+	if ($queryResult) {
+		$roomList = $queryResult->fetch_all(MYSQLI_ASSOC);
 
 		# record data
-		$ajaxResult["userID"] = $id;
 		$ajaxResult["querySuccess"] = true;
+		$ajaxResult["roomList"] = json_encode($roomList);
 	}
 	else {
 		# indicate if errors occur

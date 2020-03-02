@@ -1,9 +1,6 @@
 <?php
-# This script adds a new user to the database, taking the specified screen name for the user
-# and returning the ID of the new user
-
-# initialize result array
-$ajaxResult = array();
+# This script takes the ID of a channel and returns detailed information about it, including the name,
+# description, ID of the room it's in, and date and time of creation
 
 # initialize result array
 $ajaxResult = array();
@@ -16,18 +13,16 @@ if ($db) {
 	$ajaxResult["sqlConnectSuccess"] = true;
 
 	# read parameters
-	$screenName = $_POST["screenName"];
+	$channelID = $_POST["channelID"];
 
 	# execute query
-	if ($db->query("call addUser('$screenName', @p_userID)")) {
-		$queryResult = $db->query("select @p_userID");
-
-		# parse query results
-		$id = $queryResult->fetch_row()[0];
+	$queryResult = $db->query("call getChannelInfo('$channelID')");
+	if ($queryResult) {
+		$channelInfo = $queryResult->fetch_assoc();
 
 		# record data
-		$ajaxResult["userID"] = $id;
 		$ajaxResult["querySuccess"] = true;
+		$ajaxResult["channelInfo"] = json_encode($channelInfo);
 	}
 	else {
 		# indicate if errors occur

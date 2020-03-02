@@ -1,9 +1,6 @@
 <?php
-# This script adds a new user to the database, taking the specified screen name for the user
-# and returning the ID of the new user
-
-# initialize result array
-$ajaxResult = array();
+# This script adds a new message to the database, taking the ID of the user posting the message, the
+# ID of the channel the message is being posted to, and the content of the message
 
 # initialize result array
 $ajaxResult = array();
@@ -16,17 +13,14 @@ if ($db) {
 	$ajaxResult["sqlConnectSuccess"] = true;
 
 	# read parameters
-	$screenName = $_POST["screenName"];
+	$userID = $_POST["userID"];
+	$channelID = $_POST["channelID"];
+	$content = $_POST["content"];
 
 	# execute query
-	if ($db->query("call addUser('$screenName', @p_userID)")) {
-		$queryResult = $db->query("select @p_userID");
-
-		# parse query results
-		$id = $queryResult->fetch_row()[0];
-
+	$queryResult = $db->query("call postMessage('$userID', '$channelID', '$content', @p_messageID)");
+	if ($queryResult) {
 		# record data
-		$ajaxResult["userID"] = $id;
 		$ajaxResult["querySuccess"] = true;
 	}
 	else {
