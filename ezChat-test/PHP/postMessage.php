@@ -1,5 +1,5 @@
 <?php
-# This script adds a new message to the database, taking the ID of the user posting the message, the
+# This script adds a new message to the database, taking the username and password of the user posting the message, the
 # ID of the channel the message is being posted to, and the content of the message
 
 # initialize result array
@@ -13,18 +13,27 @@ if ($db) {
 	$ajaxResult["sqlConnectSuccess"] = true;
 
 	# read parameters
-	$userID = $_POST["userID"];
+	$username = $_POST["username"];
+	$password = $_POST["password"];
 	$channelID = $_POST["channelID"];
 	$content = $_POST["content"];
 
-	# execute query
-	$queryResult = $db->query("call postMessage('$userID', '$channelID', '$content', @p_messageID)");
+	# get user ID
+	$queryResult = $db->query("select login('$username', '$password')");
 	if ($queryResult) {
-		# record data
-		$ajaxResult["querySuccess"] = true;
+		$userID = $queryResult->fetch_row()[0];
+		# execute main query
+		$queryResult = $db->query("call postMessage('$userID', '$channelID', '$content', @p_messageID)");
+		if ($queryResult) {
+			# record data
+			$ajaxResult["querySuccess"] = true;
+		}
+		else {
+			# indicate if errors occur
+			$ajaxResult["querySuccess"] = false;
+		}
 	}
 	else {
-		# indicate if errors occur
 		$ajaxResult["querySuccess"] = false;
 	}
 }
