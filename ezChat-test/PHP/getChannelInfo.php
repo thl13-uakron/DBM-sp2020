@@ -13,6 +13,7 @@ if ($db) {
 	$ajaxResult["sqlConnectSuccess"] = true;
 
 	# read parameters
+	$_POST = json_decode(file_get_contents('php://input'), true);
 	$channelID = $_POST["channelID"];
 
 	# execute query
@@ -23,14 +24,17 @@ if ($db) {
 		# record data
 		$ajaxResult["querySuccess"] = true;
 		$ajaxResult["channelInfo"] = json_encode($channelInfo);
+		$ajaxResult["errorCode"] = $db->errno;
 	}
 	else {
 		# indicate if errors occur
 		$ajaxResult["querySuccess"] = false;
+		$ajaxResult["errorCode"] = $db->errno;
 	}
 }
 else {
 	$ajaxResult["sqlConnectSuccess"] = false;
+	$ajaxResult["errorCode"] = $db->errno;
 }
 
 # return data

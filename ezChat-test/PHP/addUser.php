@@ -5,9 +5,6 @@
 # initialize result array
 $ajaxResult = array();
 
-# initialize result array
-$ajaxResult = array();
-
 # get connection to mysql database
 include "dbAccess.php";
 $db = get_db_connection();
@@ -16,6 +13,7 @@ if ($db) {
 	$ajaxResult["sqlConnectSuccess"] = true;
 
 	# read parameters
+	$_POST = json_decode(file_get_contents('php://input'), true);
 	$screenName = $_POST["screenName"];
 
 	# execute query

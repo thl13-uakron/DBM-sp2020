@@ -9,10 +9,13 @@ $ajaxResult = array();
 include "dbAccess.php";
 $db = get_db_connection();
 
+echo json_encode($_POST);
+
 if ($db) {
 	$ajaxResult["sqlConnectSuccess"] = true;
 
 	# read parameters
+	$_POST = json_decode(file_get_contents('php://input'), true);
 	$username = $_POST["username"];
 	$password = $_POST["password"];
 
@@ -28,10 +31,12 @@ if ($db) {
 	}
 	else {
 		$ajaxResult["querySuccess"] = false;
+		$ajaxResult["errorCode"] = $db->errno;
 	}
 }
 else {
 	$ajaxResult["sqlConnectSuccess"] = false;
+	$ajaxResult["errorCode"] = $db->errno;
 }
 
 # return results

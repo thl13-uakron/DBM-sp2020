@@ -23,10 +23,12 @@ if ($db) {
 	else {
 		# indicate if errors occur
 		$ajaxResult["querySuccess"] = false;
+		$ajaxResult["errorCode"] = $db->errno;
 	}
 }
 else {
 	$ajaxResult["sqlConnectSuccess"] = false;
+	$ajaxResult["errorCode"] = $db->errno;
 }
 
 # return data

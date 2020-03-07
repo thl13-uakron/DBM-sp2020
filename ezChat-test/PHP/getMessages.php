@@ -12,9 +12,11 @@ if ($db) {
 	$ajaxResult["sqlConnectSuccess"] = true;
 
 	# read parameters
+	$_POST = json_decode(file_get_contents('php://input'), true);
 	$channelID = $_POST["channelID"];
 
 	# execute query
+	$ajaxResult["updateTime"] = $db->query("select NOW()")->fetch_row()[0];
 	$queryResult = $db->query("call getMessages('$channelID')");
 	if ($queryResult) {
 		$messageList = $queryResult->fetch_all(MYSQLI_ASSOC);
@@ -22,6 +24,7 @@ if ($db) {
 		# record data
 		$ajaxResult["querySuccess"] = true;
 		$ajaxResult["messageList"] = json_encode($messageList);
+		$ajaxResult["channelID"] = $channelID;
 	}
 	else {
 		# indicate if errors occur
