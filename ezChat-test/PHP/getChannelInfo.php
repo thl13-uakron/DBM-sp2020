@@ -14,7 +14,7 @@ if ($db) {
 
 	# read parameters
 	$_POST = json_decode(file_get_contents('php://input'), true);
-	$channelID = $_POST["channelID"];
+	$channelID = $db->real_escape_string($_POST["channelID"]);
 
 	# execute query
 	$queryResult = $db->query("call getChannelInfo('$channelID')");
@@ -39,5 +39,6 @@ else {
 
 # return data
 echo json_encode($ajaxResult);
+$db->close();
 
 ?>

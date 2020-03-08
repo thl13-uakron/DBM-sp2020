@@ -13,7 +13,7 @@ if ($db) {
 
 	# read parameters
 	$_POST = json_decode(file_get_contents('php://input'), true);
-	$channelID = $_POST["channelID"];
+	$channelID = $db->real_escape_string($_POST["channelID"]);
 
 	# execute query
 	$ajaxResult["updateTime"] = $db->query("select NOW()")->fetch_row()[0];
@@ -23,7 +23,7 @@ if ($db) {
 
 		# record data
 		$ajaxResult["querySuccess"] = true;
-		$ajaxResult["messageList"] = json_encode($messageList);
+		$ajaxResult["messageList"] = $messageList;
 		$ajaxResult["channelID"] = $channelID;
 	}
 	else {
@@ -37,5 +37,6 @@ else {
 
 # return data
 echo json_encode($ajaxResult);
+#$db->close();
 
 ?>

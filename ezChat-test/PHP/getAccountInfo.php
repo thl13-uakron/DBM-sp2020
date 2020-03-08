@@ -1,6 +1,6 @@
 <?php
-# This script adds a new message to the database, taking the userID and password of the user posting the message, the
-# ID of the channel the message is being posted to, and the content of the message
+# This script takes the userID and password of a user and returns the information associated with their
+# account, as well as their screen name and whether or not they're registered
 
 # initialize result array
 $ajaxResult = array();
@@ -16,18 +16,36 @@ if ($db) {
 	$_POST = json_decode(file_get_contents('php://input'), true);
 	$userID = $db->real_escape_string($_POST["userID"]);
 	$password = $db->real_escape_string($_POST["password"]);
-	$channelID = $db->real_escape_string($_POST["channelID"]);
-	$content = $db->real_escape_string($_POST["content"]);
 
 	# validate user ID
 	$queryResult = $db->query("select validateUser('$userID', '$password', true)");
 	if ($queryResult) {
 		if ($userID != null && $queryResult->fetch_row()[0]) {
-			# execute main query
-			$queryResult = $db->query("call postMessage('$userID', '$channelID', '$content', @p_messageID)");
+			# get account info
+			$queryResult = $db->query("call getAccountInfo('$userID', '$password')");
 			if ($queryResult) {
 				# record data
 				$ajaxResult["querySuccess"] = true;
+				$ajaxResult["accountInfo"] = $queryResult->fetch_assoc();
+
+				# determine if user is registered
+				if (!$ajaxResult["accountInfo"]) {
+					$ajaxResult["isRegistered"] = false;
+				}
+				else {
+					$ajaxResult["isRegistered"] = true;
+				}
+
+				# get screen name
+				free_all_results($db);
+				$queryResult = $db->query("select getScreenName('$userID')");
+				if ($queryResult) {
+					$ajaxResult["screenName"] = $queryResult->fetch_row()[0];
+				}
+				else {
+					$ajaxResult["querySuccess"] = false;
+					$ajaxResult["errorCode"] = $db->errno;
+				}
 			}
 			else {
 				# indicate if errors occur

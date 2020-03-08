@@ -15,19 +15,19 @@ if ($db) {
 
 	# read parameters
 	$_POST = json_decode(file_get_contents('php://input'), true);
-	$roomName = $_POST["roomName"];
-	$description = $_POST["description"];
-	$browsable = $_POST["browsable"];
-	$public = $_POST["public"];
-	$creatorID = $_POST["creatorID"];
-	$creatorPassword = $_POST["creatorPassword"];
-	$roomPassword = $_POST["roomPassword"];
+	$roomName = $db->real_escape_string($_POST["roomName"]);
+	$description = $db->real_escape_string($_POST["description"]);
+	$browsable = $db->real_escape_string($_POST["browsable"]);
+	$public = $db->real_escape_string($_POST["public"]);
+	$creatorID = $db->real_escape_string($_POST["creatorID"]);
+	$creatorPassword = $db->real_escape_string($_POST["creatorPassword"]);
+	$roomPassword = $db->real_escape_string($_POST["roomPassword"]);
 
 	# validate ID of creator
 	$queryResult = $db->query("select validateUser('$creatorID', '$creatorPassword', false)");
-	if ($queryResult && ) {
+	if ($queryResult) {
 		# execute main query
-		if ($queryResult->fetch_row()[0]) {
+		if ($userID != null && $queryResult->fetch_row()[0]) {
 			$queryResult = $db->query("call addRoom('$roomName', '$description', '$browsable', '$public', '$roomPassword', '$creatorID', @p_roomID)");
 			if ($queryResult) {
 				$queryResult = $db->query("select @p_roomID");
@@ -63,5 +63,6 @@ else {
 
 # return data
 echo json_encode($ajaxResult);
+#$db->close();
 
 ?>

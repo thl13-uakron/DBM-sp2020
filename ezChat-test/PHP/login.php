@@ -9,15 +9,13 @@ $ajaxResult = array();
 include "dbAccess.php";
 $db = get_db_connection();
 
-echo json_encode($_POST);
-
 if ($db) {
 	$ajaxResult["sqlConnectSuccess"] = true;
 
 	# read parameters
 	$_POST = json_decode(file_get_contents('php://input'), true);
-	$username = $_POST["username"];
-	$password = $_POST["password"];
+	$username = $db->real_escape_string($_POST["username"]);
+	$password = $db->real_escape_string($_POST["password"]);
 
 	# execute query
 	$queryResult = $db->query("select login('$username', '$password')"); 
@@ -41,5 +39,6 @@ else {
 
 # return results
 echo json_encode($ajaxResult);
+#$db->close();
 
 ?>

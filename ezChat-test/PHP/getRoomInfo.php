@@ -14,7 +14,7 @@ if ($db) {
 
 	# read parameters
 	$_POST = json_decode(file_get_contents('php://input'), true);
-	$roomID = $_POST["roomID"];
+	$roomID = $db->real_escape_string($_POST["roomID"]);
 
 	# execute query
 	$queryResult = $db->query("call getRoomInfo('$roomID')");
@@ -38,5 +38,6 @@ else {
 
 # return data
 echo json_encode($ajaxResult);
+#$db->close();
 
 ?>

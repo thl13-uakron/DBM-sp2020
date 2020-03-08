@@ -14,7 +14,7 @@ if ($db) {
 
 	# read parameters
 	$_POST = json_decode(file_get_contents('php://input'), true);
-	$roomID = $_POST["roomID"];
+	$roomID = $db->real_escape_string($_POST["roomID"]);
 
 	# execute query
 	$queryResult = $db->query("call getChannelsByRoom('$roomID')");
@@ -23,7 +23,7 @@ if ($db) {
 
 		# record data
 		$ajaxResult["querySuccess"] = true;
-		$ajaxResult["roomInfo"] = json_encode($roomInfo);
+		$ajaxResult["roomInfo"] = $roomInfo;
 	}
 	else {
 		# indicate if errors occur
@@ -38,5 +38,6 @@ else {
 
 # return data
 echo json_encode($ajaxResult);
+#$db->close();
 
 ?>

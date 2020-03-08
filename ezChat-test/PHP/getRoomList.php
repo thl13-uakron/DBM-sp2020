@@ -18,7 +18,7 @@ if ($db) {
 
 		# record data
 		$ajaxResult["querySuccess"] = true;
-		$ajaxResult["roomList"] = json_encode($roomList);
+		$ajaxResult["roomList"] = $roomList;
 	}
 	else {
 		# indicate if errors occur
@@ -33,5 +33,6 @@ else {
 
 # return data
 echo json_encode($ajaxResult);
+#$db->close();
 
 ?>

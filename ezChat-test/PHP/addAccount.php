@@ -14,8 +14,9 @@ if ($db) {
 	$ajaxResult["sqlConnectSuccess"] = true;
 
 	# read parameters
-	$username = $_POST["username"];
-	$password = $_POST["password"];
+	$_POST = json_decode(file_get_contents('php://input'), true);
+	$username = $db->real_escape_string($_POST["username"]);
+	$password = $db->real_escape_string($_POST["password"]);
 
 	# execute query
 	if ($db->query("call addAccount('$username', '$password', @p_userID)")) {

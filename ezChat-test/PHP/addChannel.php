@@ -13,9 +13,10 @@ if ($db) {
 	$ajaxResult["sqlConnectSuccess"] = true;
 
 	# read parameters
-	$channelName = $_POST["channelName"];
-	$description = $_POST["description"];
-	$roomID = $_POST["roomID"];
+	$_POST = json_decode(file_get_contents('php://input'), true);
+	$channelName = $db->real_escape_string($_POST["channelName"]);
+	$description = $db->real_escape_string($_POST["description"]);
+	$roomID = $db->real_escape_string($_POST["roomID"]);
 
 	# execute query
 	$queryResult = $db->query("call addChannel('$channelName', '$description', '$roomID', @p_channelID)");

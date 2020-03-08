@@ -14,17 +14,27 @@ if ($db) {
 
 	# read parameters
 	$_POST = json_decode(file_get_contents('php://input'), true);
-	$channelID = $_POST["channelID"];
-	$lastUpdateTime = $_POST["lastUpdateTime"];
+	$channelID = $db->real_escape_string($_POST["channelID"]);
+	$lastUpdateTime = $db->real_escape_string($_POST["lastUpdateTime"]);
 
 	$ajaxResult["channelID"] = $channelID;
 
 	# poll for updates
-	while (1) {
-		$ajaxResult["updateTime"] = $db->query("select NOW()")->fetch_array()[0];
+	$updatesDetected = false;
+	while (!$updatesDetected) {
+		# record current time
+		$queryResult = $db->query("select NOW()");
+		if (!$queryResult) {
+			$ajaxResult["querySuccess"] = false;
+			$ajaxResult["errorCode"] = $db->errno;
+			break;
+		}
+		$ajaxResult["updateTime"] = $queryResult->fetch_array()[0];
 
-		# new messages
-		$queryResult = $db->query("call getMessages('$channelID')");
+		# check changes in permissions
+
+		# check new messages
+		$queryResult = $db->query("call getNewMessages('$channelID', '$lastUpdateTime')");
 		if ($queryResult) {
 			$newMessages = $queryResult->fetch_all(MYSQLI_ASSOC);
 
@@ -32,22 +42,36 @@ if ($db) {
 			if (count($newMessages) > 0) {
 				$ajaxResult["querySuccess"] = true;
 				$ajaxResult["newMessages"] = json_encode($newMessages);
-				break;
+				$updatesDetected = true;
 			}
-			
 		}
 		else {
 			# indicate if errors occur
 			$ajaxResult["querySuccess"] = false;
+			$ajaxResult["errorCode"] = $db->errno;
 			break;
+		}
+
+		# check edited messages
+
+		# check deleted messages
+
+		# check name changes
+
+		# free results
+		if (!$updatesDetected) {
+			sleep(1.5);
+			free_all_results($db);
 		}
 	}
 }
 else {
 	$ajaxResult["sqlConnectSuccess"] = false;
+	$ajaxResult["errorCode"] = $db->errno;
 }
 
 # return data
 echo json_encode($ajaxResult);
+#$db->close();
 
 ?>
