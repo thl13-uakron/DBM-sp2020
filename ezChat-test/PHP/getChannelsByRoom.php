@@ -19,11 +19,11 @@ if ($db) {
 	# execute query
 	$queryResult = $db->query("call getChannelsByRoom('$roomID')");
 	if ($queryResult) {
-		$roomInfo = $queryResult->fetch_all(MYSQLI_ASSOC);
+		$channelList = $queryResult->fetch_all(MYSQLI_ASSOC);
 
 		# record data
 		$ajaxResult["querySuccess"] = true;
-		$ajaxResult["roomInfo"] = $roomInfo;
+		$ajaxResult["channelList"] = $channelList;
 	}
 	else {
 		# indicate if errors occur

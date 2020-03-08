@@ -60,7 +60,7 @@ if ($db) {
 
 		# free results
 		if (!$updatesDetected) {
-			sleep(1.5);
+			sleep(0.75);
 			free_all_results($db);
 		}
 	}

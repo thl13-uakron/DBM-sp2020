@@ -23,8 +23,7 @@ if ($db) {
 
 		# record data
 		$ajaxResult["querySuccess"] = true;
-		$ajaxResult["channelInfo"] = json_encode($channelInfo);
-		$ajaxResult["errorCode"] = $db->errno;
+		$ajaxResult["channelInfo"] = $channelInfo;
 	}
 	else {
 		# indicate if errors occur

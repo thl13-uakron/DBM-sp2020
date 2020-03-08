@@ -23,7 +23,7 @@ if ($db) {
 
 		# record data
 		$ajaxResult["querySuccess"] = true;
-		$ajaxResult["roomInfo"] = json_encode($roomInfo);
+		$ajaxResult["roomInfo"] = $roomInfo;
 	}
 	else {
 		# indicate if errors occur
