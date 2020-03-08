@@ -25,20 +25,39 @@
 		background-color: black;
 		color: darkgray;
 		font-family: arial;
-		line-height: 1.1;
+		line-height: 1.2;
 		margin:0;
 	}
 
 	button:hover:enabled{
 		background-color:gray;
+		cursor:pointer;
 	}
 
 	button:disabled {
 		background-color:darkgray;
 	}
 
+	.clickableListing:hover {
+		background-color:#202020;
+		cursor:pointer;
+	}
+
+	.selectedListing {
+		background-color:#303030;
+		font-weight: bold;
+	}
+
 	.smallText {
-		font-size: 0.5em;
+		font-size: smaller;
+	}
+
+	.boldText {
+		font-weight: bold;
+	}
+
+	.normalText {
+		font-weight: normal;
 	}
 
 	.region {
@@ -58,6 +77,14 @@
 
 	.lightGrayText {
 		color: lightgray;
+	}
+
+	.silverText {
+		color: silver;
+	}
+
+	.grayText {
+		color: gray;
 	}
 
 	.bottomMargin {
@@ -83,7 +110,7 @@
 
 <body>
 	<div id="leftRegion" class="region">
-		<div id="roomInfo" class="padded">
+		<div id="roomInfo" class="padded bottomMargin">
 		</div>
 
 		<div id="roomList" class="padded">
@@ -95,7 +122,7 @@
 	</div>
 
 	<div id="rightRegion" class="region">
-		<div id="accountInfo" class="padded">
+		<div id="accountInfo" class="padded bottomMargin">
 		</div>
 
 		<div id="userList" class="padded" style="flex-grow: 2">
@@ -111,18 +138,211 @@
 			})
 		});
 
-	// functions for retrieving data from backend
+	var defaultRoomID = 2;
 
-	// functions for dynamically generating page content
-	function showRoomInfo(roomID) {
-		var parent = document.getElementById("roomInfo");
-		parent.innerHTML = 
-		`
+	// helper function for preventing script injections, copied from https://stackoverflow.com/questions/6234773/can-i-escape-html-special-chars-in-javascript
+	function escapeHTML(unsafe) {
+	    return unsafe
+	         .replace(/&/g, "&amp;")
+	         .replace(/</g, "&lt;")
+	         .replace(/>/g, "&gt;")
+	         .replace(/"/g, "&quot;")
+	         .replace(/'/g, "&#039;");
+	 }
+
+	// functions for retrieving data from backend and dynamically generating page content
+	function getListedChannelElement(channelInfo, roomInfo, currentChannelID) {
+		var element = document.createElement("div");
+		var elementID = "channel" + channelInfo["channelID"];
+		element.id = elementID;
+		element.className = "channelListing padded";
+		element.dataset.channelID = channelInfo["channelID"];
+
+		element.innerHTML = `
+		<span id="`+elementID+`"channelName" class="lightGrayText">` + escapeHTML(channelInfo["channelName"]) + `</span> 
+		<span class="normalText">(channelID: <span id="`+elementID+`channelID">` + channelInfo["channelID"] + `</span>)</span>
 		`;
+
+		if (channelInfo["channelID"] == currentChannelID) {
+			element.className += " selectedListing";
+		}
+		else {
+			element.className += " clickableListing";
+			
+		}
+
+		if (channelInfo["description"]) {
+			element.innerHTML += `
+			<br />
+			<span class="normalText smallText" id="`+elementID+`"description">
+			`+channelInfo["description"]+`
+			</span>
+			`
+		}
+
+		element.addEventListener("click", function() {
+			channelID = channelInfo["channelID"];
+			enterChannel(userID, password, roomInfo["roomID"], channelID);
+		});
+
+		return element;
 	}
 
-	function getListedRoomElement(roomInfo) {
+	function getRoomInfoUpdates(userID, password, roomID, channelID) {
 		//
+	}
+
+	function showRoomInfo(userID, password, roomID, channelID) {
+		var parent = document.getElementById("roomInfo");
+		fetch("PHP/getChannelInfo.php", {
+			method: "POST",
+			body: JSON.stringify({
+				userID: userID,
+				password: password,
+				channelID: channelID,
+			})
+		})
+		.then(response => response.text())
+		.then(data => {
+			console.log(data);
+			data = JSON.parse(data);
+
+			channelInfo = data["channelInfo"];
+			if (channelInfo) {
+				roomID = channelInfo["roomID"];
+				if (roomID) {
+					// update room List
+					var previousRoomListing = document.getElementsByClassName("roomListing selectedListing")[0];
+					if (previousRoomListing && previousRoomListing.dataset.roomID != roomID) {
+						previousRoomListing.className = previousRoomListing.className.replace('selectedListing', "clickableListing");
+						var roomListing = document.getElementById("room" + roomID);
+						if (roomListing) {
+							roomListing.className = roomListing.className.replace("clickableListing", "selectedListing");
+						}
+					}
+
+					// display room info if not already displayed
+					fetch("PHP/getRoomInfo.php", {
+						method: "POST",
+						body: JSON.stringify({
+							userID: userID,
+							password: password,
+							roomID: roomID 
+						})
+					})
+					.then(response => response.text())
+					.then(data => {
+						console.log(data);
+						data = JSON.parse(data);
+
+						if (parent.dataset.roomID != roomID) {
+							parent.dataset.roomID = roomID;
+							roomInfo = data["roomInfo"];
+							parent.innerHTML = `
+							<div id="roomInfoHeader" class="padded">
+								<span class="lightGrayText"><b> Current Room: <span id="roomNameElement"></span></b> </span> 
+								(roomID: <span id="roomIDElement"> </span>)
+								<br />
+								<i><span class="smallText grayText"> Created by <span id="creatorNameElement"></span> (userID: <span id="creatorIDElement"></span>) 
+								on <span id="creationDateElement"></span> </span></i>
+							</div>
+							<div id="roomDescriptionElement"> </div>
+							<div id="channelListElement"> 
+								<div id="channelListHeader" class="padded silverText"> <b> Channels in this Room </b> </div>
+								<div id="channelListBody" class="bottomMargin"> </div>
+							</div>
+							`;
+
+							document.getElementById("roomNameElement").innerHTML = escapeHTML(roomInfo["roomName"]);
+							document.getElementById("roomIDElement").innerHTML = roomID;
+							document.getElementById("creatorNameElement").innerHTML = escapeHTML(roomInfo["creatorName"]);
+							document.getElementById("creatorIDElement").innerHTML = roomInfo["creatorID"];
+							document.getElementById("creationDateElement").innerHTML = roomInfo["creationDate"];
+
+							if (roomInfo["description"]) {
+								var roomDescriptionElement = document.getElementById("roomDescriptionElement");
+								roomDescriptionElement.className = "padded bottomMargin";
+								roomDescriptionElement.innerHTML = escapeHTML(roomInfo["description"])
+							}
+
+							fetch("PHP/getChannelsByRoom.php", {
+								method: "POST",
+								body: JSON.stringify({
+									roomID: roomID 
+								})
+							})
+							.then(response => response.text())
+							.then(data => {
+								console.log(data);
+								data = JSON.parse(data);
+
+								channelList = data["channelList"]
+								var channelListBody = document.getElementById("channelListBody");
+								channelListBody.innerHTML = "";
+								for (i in channelList) {
+									channelListBody.appendChild(getListedChannelElement(channelList[i], roomInfo, channelID));
+								}
+							})
+							.catch(error => console.log(error));
+						}
+						else {
+							// update channel list if already in room
+							var previousChannelListing = document.getElementsByClassName("channelListing selectedListing")[0];
+							if (previousChannelListing && previousChannelListing.dataset.channelID != channelID) {
+								previousChannelListing.className = previousChannelListing.className.replace('selectedListing', "clickableListing");
+								var channelListing = document.getElementById("channel" + channelID);
+								if (channelListing) {
+									channelListing.className = channelListing.className.replace("clickableListing", "selectedListing");
+								}
+							}
+						}
+
+						// poll for future updates
+						getRoomInfoUpdates(userID, password, roomID, channelID);
+					})
+					.catch(error => console.log(error));
+				}
+				else {
+					//
+				}
+			}
+			else {
+				if (!roomID) roomID = defaultRoomID;
+				enterRoom(userID, password, roomID);
+			}
+		})
+	}
+
+	function getListedRoomElement(roomInfo, currentRoomID) {
+		var element = document.createElement("div");
+		var elementID = "room" + roomInfo["roomID"];
+		element.id = elementID;
+		element.className = "roomListing padded";
+		element.dataset.roomID = roomInfo["roomID"];
+
+		element.innerHTML = `
+		<span id="`+elementID+`"roomName" class="lightGrayText">` + escapeHTML(roomInfo["roomName"]) + `</span> 
+		<span class="normalText">(roomID: <span id="`+elementID+`roomID">` + roomInfo["roomID"] + `</span>)</span>
+		`;
+
+		if (roomInfo["roomID"] == roomID) {
+			element.className += " selectedListing";
+		}
+		else {
+			element.className += " clickableListing";
+
+		}
+		element.addEventListener("click", function() {
+			/*currentRoomElement = document.getElementById("room" + roomID);
+			if (currentRoomElement) {
+				currentRoomElement.className = currentRoomElement.className.replace("selectedListing", "clickableListing");
+			}
+			element.className = element.className.replace("clickableListing", "selectedListing");*/
+			roomID = roomInfo["roomID"];
+			enterRoom(userID, password, roomID);
+		});
+		
+		return element;
 	}
 
 	function showDMs(userID, password) {
@@ -141,18 +361,28 @@
 		.then((data) => {
 			console.log(data);
 			data = JSON.parse(data);
-			
+
 			rooms = data["roomList"];
 			parent.innerHTML = `
-			<div id="allRoomsHeader" class="padded">
+			<div id="allRoomsHeader" class="padded silverText">
 				<b> Public Rooms </b>
 			</div>
 			<div id="allRoomsBody">
 			</div>
 			`;
 
+			var allRoomsBody = document.getElementById("allRoomsBody");
+
+			for (i in rooms) {
+				if (!document.getElementById("room" + rooms[i]["roomID"])) {
+					allRoomsBody.appendChild(getListedRoomElement(rooms[i], roomID));
+				}
+			}
 		})
 		.catch((error) => console.log(error));
+	}
+	function getRoomListUpdates(userID, password) {
+		//
 	}
 	function showRoomLists(userID, password) { 
 		var parent = document.getElementById("roomList");
@@ -168,6 +398,9 @@
 		showDMs(userID, password);
 		showRecentRooms(userID, password);
 		showPublicRooms(userID, password);
+
+		// poll for updates
+		getRoomListUpdates(userID, password);
 	}
 
 	function login(p_userID, p_password) {
@@ -224,9 +457,13 @@
 				})
 			}
 		})
-		parent.addEventListener("keyup", function() {
+		parent.addEventListener("keyup", function(e) {
 			if (usernameInput.value.length > 0 && passwordInput.value.length > 0) {
 				loginGoButton.disabled = false;
+				loginStatus.innerHTML = "";
+				if (e.keyCode == 13) {
+					loginGoButton.click();
+				}
 			}
 			else {
 				loginGoButton.disabled = true;
@@ -237,7 +474,7 @@
 	function showAccountCreation() {
 		parent = document.getElementById("accountOptions");
 		parent.innerHTML = `
-		<div class="bottomMargin lightGrayText"> Create New Account: </div>
+		<div class="bottomMargin lightGrayText" id="accountCreationHeader"> Create New Account: </div>
 		<div> Username (1-24 characters)
 		<br />
 		<input id='usernameInput' class="bottomMargin" maxlength="24"> </input> </div>
@@ -297,6 +534,9 @@
 			if (usernameInput.value.length > 0 && passwordInput.value.length > 0 && !passwordInput.value.match(restrictedPasswordRegex) && confirmPassword.value == passwordInput.value) {
 				signupGoButton.disabled = false;
 				signupStatus.innerHTML = "";
+				if (e.keyCode == 13) {
+					signupGoButton.click();
+				}
 			}
 			else {
 				signupGoButton.disabled = true;
@@ -379,7 +619,7 @@
 			</div>
 			`;
 
-			document.getElementById("screenName").innerHTML = data["screenName"];
+			document.getElementById("screenName").innerHTML = escapeHTML(data["screenName"]);
 			document.getElementById("userID").innerHTML = userID;
 
 			if (data["isRegistered"]) {
@@ -408,19 +648,59 @@
 		`;
 	}
 
-	function showUserLists(userID, password) {
+	function showUserLists(userID, password, roomID, channelID) {
 		var parent = document.getElementById("userList");
 		parent.innerHTML =
 		`
 		`;
 	}
 
+	function enterRoom(userID, password, roomID) {
+		// get list of channels associated with room
+		fetch("PHP/getChannelsByRoom.php", {
+			method: "POST",
+			body: JSON.stringify({
+				roomID: roomID 
+			})
+		})
+		.then(response => response.text())
+		.then(data => {
+			console.log(data);
+			data = JSON.parse(data);
+
+			if (data["channelList"]) {
+				channelID = data["channelList"][0]["channelID"];
+				enterChannel(userID, password, roomID, channelID);
+			}
+			else {
+				enterRoom(userID, password, defaultRoomID);
+			}
+		})
+		.catch(error => console.log(error));
+	}
+
+	function enterChannel(userID, password, roomID, channelID) {
+		if (channelID) {
+			// record channelID and display channel information and chat stream
+			document.cookie = "channelID=" + channelID;
+			history.pushState({channelID: channelID}, "", "?channelID=" + channelID);
+
+			showRoomInfo(userID, password, roomID, channelID);
+			showChat(userID, password, channelID);
+			showUserLists(userID, password, roomID, channelID);
+		}
+		else {
+			// get channelID from roomID if channelID is null
+			// move to default room if both roomID and channelID are null
+			if (!roomID) roomID = defaultRoomID;
+			enterRoom(userID, password, roomID, channelID);
+		}
+	}
+
 	function showPage(userID, password, channelID, roomID) {
-		showRoomInfo(userID, password, roomID, channelID);
 		showRoomLists(userID, password);
-		showChat(userID, password, channelID);
 		showAccountInfo(userID, password);
-		showUserLists(userID, password);
+		enterChannel(userID, password, roomID, channelID);
 	}
 
 	// get client parameters
@@ -448,23 +728,23 @@
 			$queryResult = $db->query("call getChannelInfo('$channelID')");
 			return count($queryResult->fetch_all()) > 0;
 		}
-		$channelID = "null";
+		$channelID = null;
 		# get channel ID from GET parameter
 		if (array_key_exists("channelID", $_GET)) {
 			$channelID = $_GET["channelID"];
 			# check if ID is valid
 			if (!isValidChannel($db, $channelID)) {
-				$channelID = "null";
+				$channelID = null;
 			}
 		}
 		# get channel ID from cookie if GET parameter not present or invalid
-		if (!$channelID && (array_key_exists("channelID", $_COOKIE))) {
+		if (!$channelID && (array_key_exists("channelID", $_COOKIE)) && !(array_key_exists("roomID", $_GET))) {
 			# reset db connection
 			$free_all_results($db);
 
 			$channelID = $_COOKIE["channelID"];
 			if (!isValidChannel($db, $channelID)) {
-				$channelID = "null";
+				$channelID = null;
 			}
 		}
 		echo $channelID;
@@ -478,7 +758,7 @@
 		# reset db connection
 		free_all_results($db);
 
-		$roomID = "null";
+		$roomID = null;
 		# get room ID from channel ID is present
 		if ($channelID) {
 			$queryResult = $db->query("call getChannelInfo('$channelID')");
@@ -492,12 +772,8 @@
 				$roomID = $_GET["roomID"];
 				# check if ID is valid
 				if (!isValidRoom($db, $roomID)) {
-					$channelID = "null";
+					$channelID = null;
 				}
-			}
-			# set to default room if both roomID and channelID are null
-			else {
-				$roomID = 2;
 			}
 		}
 
@@ -506,6 +782,11 @@
 
 		echo $roomID;
 	?>`;
+
+	// set roomID to default room if both roomID and channelID are null
+	if (!roomID && !channelID) {
+		roomID = defaultRoomID;
+	}
 
 	// assign guest ID if current ID/password not valid
 	if (!Number(`<?php echo ($userID != null && $db->query("select validateUser('$userID', '$password', true)")->fetch_array()[0]) ?>`)) {
