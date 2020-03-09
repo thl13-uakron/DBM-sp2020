@@ -41,7 +41,7 @@ if ($db) {
 			# record data and break loop if updates are detected
 			if (count($newMessages) > 0) {
 				$ajaxResult["querySuccess"] = true;
-				$ajaxResult["newMessages"] = json_encode($newMessages);
+				$ajaxResult["newMessages"] = $newMessages;
 				$updatesDetected = true;
 			}
 		}
@@ -60,7 +60,7 @@ if ($db) {
 
 		# free results
 		if (!$updatesDetected) {
-			sleep(0.75);
+			sleep(0.7);
 			free_all_results($db);
 		}
 	}

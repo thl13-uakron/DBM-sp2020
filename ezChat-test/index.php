@@ -60,6 +60,10 @@
 		font-weight: normal;
 	}
 
+	.leftFlexAlign {
+		align-self: flex-end;
+	}
+
 	.region {
 		display: flex;
 		flex-direction: column;
@@ -67,8 +71,19 @@
 		flex-grow: 1;
 	}
 
+	.columnFlex {
+		display: flex; 
+		flex-direction: column;
+	}
+
+	.rowFlex {
+		flex-grow: 1;
+		display: flex;
+		flex-direction: row;
+	}
+
 	.padded {
-		padding: 2%;
+		padding: 5px;
 	}
 
 	.darkGrayText {
@@ -87,24 +102,47 @@
 		color: gray;
 	}
 
+	.dimGrayText {
+		color: dimgray;
+	}
+
 	.bottomMargin {
-		margin-bottom: 2%;
+		margin-bottom: 5px;
 	}
 
 	#messageStream, #roomList, #userList {
 		overflow-y: auto;
 	}
 
+	#messageStream {
+		position:fixed;
+		box-sizing: border-box;
+		width: 56%;
+		height: 80%;
+		bottom: 20%;
+	}
+
 	#chatBox {
+		position:fixed;
+		box-sizing: border-box;
+		width: 56%;
+		bottom: 0;
 		display: flex;
-		background-color: darkgray;
+		background-color: #C0C0C0;
+		max-height: 20%;
+		height: 20%;
+		min-height: 20%;
 	}
 
 	#centerRegion {
-		flex-grow: 5;
-		flex-shrink: 4;
-		background-color: lightgray;
+		max-height:100%;
+		width: 56%;
+		background-color: #F0F0F0;
 		color: black;
+	}
+
+	#leftRegion, #rightRegion {
+		width:22%;
 	}
 </style>
 
@@ -188,7 +226,7 @@
 		return element;
 	}
 
-	function getRoomInfoUpdates(userID, password, roomID, channelID) {
+	function getRoomInfoUpdates(userID, password, roomID, channelID, lastUpdateTime) {
 		//
 	}
 
@@ -282,6 +320,9 @@
 								for (i in channelList) {
 									channelListBody.appendChild(getListedChannelElement(channelList[i], roomInfo, channelID));
 								}
+
+								// poll for future updates
+								getRoomInfoUpdates(userID, password, roomID, channelID, data["updateTime"]);
 							})
 							.catch(error => console.log(error));
 						}
@@ -297,8 +338,6 @@
 							}
 						}
 
-						// poll for future updates
-						getRoomInfoUpdates(userID, password, roomID, channelID);
 					})
 					.catch(error => console.log(error));
 				}
@@ -378,10 +417,13 @@
 					allRoomsBody.appendChild(getListedRoomElement(rooms[i], roomID));
 				}
 			}
+				
+			// poll for updates
+			getRoomListUpdates(userID, password, data["updateTime"]);
 		})
 		.catch((error) => console.log(error));
 	}
-	function getRoomListUpdates(userID, password) {
+	function getRoomListUpdates(userID, password, lastUpdateTime) {
 		//
 	}
 	function showRoomLists(userID, password) { 
@@ -398,9 +440,6 @@
 		showDMs(userID, password);
 		showRecentRooms(userID, password);
 		showPublicRooms(userID, password);
-
-		// poll for updates
-		getRoomListUpdates(userID, password);
 	}
 
 	function login(p_userID, p_password) {
@@ -611,7 +650,7 @@
 
 			parent.innerHTML = `
 			<div id="accountInfoHeader" class="padded">
-				<span class="lightGrayText"> Welcome to ezChat, <b><span id="screenName"> </span></b> </span>
+				<span class="lightGrayText"> <b> Welcome to ezChat, <span id="screenName"> </span></b> </span>
 				<br/> 
 				Your userID: <span id="userID"> </span>
 			</div>
@@ -634,18 +673,193 @@
 		.catch(error => console.log(error));
 	}
 
+	function getMessageElement(messageInfo) {
+		var parent = document.getElementById("messageStream");
+
+		var element = document.createElement("div");
+		var elementID = "message" + messageInfo["messageID"];
+		element.id = elementID;
+		element.className = "message columnFlex padded bottomMargin";
+		element.dataset.messageID = messageInfo["messageID"];
+
+		var messageHeader = document.createElement("div");
+		element.appendChild(messageHeader);
+		messageHeader.className = "bottomMargin rowFlex";
+		messageHeader.innerHTML = `
+		<div>
+			<span id="`+ elementID + `screenName" class="boldText">` + escapeHTML(messageInfo["screenName"]) + `</span>  
+			(userID <span id="`+ elementID + `userID">` + messageInfo["userID"] + `</span>)
+			<span class="grayText" id="`+ elementID + `sendTime"> ` + messageInfo["sendTime"] + ` </span>
+			<span class="grayText" id="`+ elementID + `editTime"></span>
+		</div>
+		`;
+
+		var messageBody = document.createElement("div");
+		element.appendChild(messageBody);
+		messageBody.className = "bottomMargin";
+		messageBody.innerHTML = escapeHTML(messageInfo["content"]);
+
+		/*
+		var messageFooter = document.createElement("div");
+		element.appendChild(messageFooter);
+		messageFooter.className = "grayText smallText bottomMargin";
+		messageFooter.innerHTML = `messageID ` + messageInfo["messageID"];
+		*/
+
+		return element;
+	}
+
+	function getChatUpdates(userID, password, channelID, lastUpdateTime) {
+		var parent = document.getElementById("messageStream");
+		if (!parent || parent.dataset.channelID != channelID) return;
+		fetch("PHP/getChannelUpdates.php", {
+			method: "POST",
+			body: JSON.stringify({
+				userID: userID,
+				password: password,
+				channelID: channelID,
+				lastUpdateTime: lastUpdateTime
+			})
+		})
+		.then(response => response.text())
+		.then(data => {
+			console.log(data);
+			data = JSON.parse(data);
+
+			parent = document.getElementById("messageStream");
+			if (!parent || parent.dataset.channelID != channelID) return;
+
+			var scrolledToBottom = parent.scrollHeight - parent.clientHeight <= parent.scrollTop + 1;
+
+			// display new messages
+			newMessages = data["newMessages"];
+			if (newMessages) {
+				for (i in newMessages) {
+					// exit if no longer viewing current channel
+					parent = document.getElementById("messageStream");
+					if (!parent || parent.dataset.channelID != channelID) return;
+
+					// ignore messages that are already present in stream
+					if (!document.getElementById("message" + newMessages[i]["messageID"]))
+						parent.appendChild(getMessageElement(newMessages[i]));
+				}
+			}
+
+			// keep message stream scrolled to bottom if currently scrolled to bottom
+			parent = document.getElementById("messageStream");
+			if (!parent || parent.dataset.channelID != channelID) return;
+			if (scrolledToBottom) {
+				parent.scrollTop = parent.scrollHeight - parent.clientHeight;
+			}
+
+			// fetch additional updates
+			setTimeout(() => { getChatUpdates(userID, password, channelID, data["updateTime"]); }, 1000);
+		})
+		.catch(error => {
+			console.log(error);
+			setTimeout(() => { getChatUpdates(userID, password, channelID, lastUpdateTime); }, 1000);
+		})
+	}
+
 	function showChat(userID, password, channelID) {
 		var parent = document.getElementById("centerRegion");
 		parent.innerHTML = 
 		`
 		<div id="chatRegion" class="region">
-			<div id="messageStream" class="padded" style="flex-grow: 5">
+			<div id="messageStream" class="padded">
 			</div>
-			<div id="chatBox" class="padded" style="flex-grow: 1; display: flex">
-				<textarea style="flex-grow: 1"></textarea>
+			<div id="chatBox" class="padded columnFlex">
+				<textarea style="flex-grow: 1" id="chatboxInput" class="bottomMargin"></textarea>
+				<div id="chatboxFooter" style="flex-grow:0" class="rowFlex"> 
+					<span id="chatboxInfo" class="smallText" style="flex-grow:1"> ENTER to send, SHIFT+ENTER to create line break </span>
+					<button id="sendButton" class="leftFlexAlign" style="flex-grow:0"> Send Message </button>
+				</div>
 			</div>
 		</div>
 		`;
+
+		var messageStream = document.getElementById("messageStream");
+		messageStream.dataset.channelID = channelID;
+		var chatInput = document.getElementById("chatboxInput");
+		var sendButton = document.getElementById("sendButton");
+
+		messageStream.innerHTML = "Loading Messages...";
+		fetch("PHP/getMessages.php", {
+			method: "POST",
+			body: JSON.stringify({
+				userID: userID,
+				password: password,
+				channelID: channelID 
+			})
+		})
+		.then(response => response.text())
+		.then(data => {
+			console.log(data);
+			data = JSON.parse(data);
+
+			// display existing messages
+			messageStream.innerHTML = `<div class="padded bottomMargin"> Start of message stream for Channel ` + channelID + ` </div>`;
+			var messageList = data["messageList"];
+			for (i in messageList) {
+				messageStream.appendChild(getMessageElement(messageList[i]));
+			}
+
+			// scroll to bottom of message stream
+			messageStream.scrollTop = messageStream.scrollHeight - messageStream.clientHeight;
+
+			// check for future updates
+			getChatUpdates(userID, password, channelID, data["updateTime"]);
+		})
+		.catch(error => console.log(error));
+
+		// set styling for input box
+		chatInput.maxlength = 512;
+		chatInput.style.resize = "none";
+		chatInput.style.rows = 4;
+		chatInput.placeholder = "Type your message here";
+
+		// set event handlers
+		sendButton.disabled = true;
+		chatInput.addEventListener("keyup", function(e) {
+			if (e.keyCode == 13 && !e.shiftKey) {
+				// send message if enter pressed
+				sendButton.click();
+			}
+			else {
+				// enable send button if message length is greater than 0
+				if (chatInput.value.length > 0) {
+					sendButton.disabled = false;
+				}
+				else {
+					sendButton.disabled = true;
+				}
+			}
+		});
+		sendButton.addEventListener("click", function() {
+			var messageContent = chatInput.value;
+
+			chatInput.readonly = true;
+			chatInput.value = "Sending...";
+			sendButton.disabled = true;
+
+			fetch("PHP/postMessage.php", {
+				method: "POST",
+				body: JSON.stringify({
+					userID: userID,
+					password: password,
+					channelID: channelID,
+					content: messageContent
+				})
+			})
+			.then(response => response.text())
+			.then(data => {
+				console.log(data);
+
+				chatInput.readonly = false;
+				chatInput.value = "";
+			})
+			.catch(error => console.log(error));
+		})
 	}
 
 	function showUserLists(userID, password, roomID, channelID) {
@@ -683,7 +897,7 @@
 		if (channelID) {
 			// record channelID and display channel information and chat stream
 			document.cookie = "channelID=" + channelID;
-			history.pushState({channelID: channelID}, "", "?channelID=" + channelID);
+			history.replaceState({channelID: channelID}, "", "?channelID=" + channelID);
 
 			showRoomInfo(userID, password, roomID, channelID);
 			showChat(userID, password, channelID);

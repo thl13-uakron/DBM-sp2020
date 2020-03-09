@@ -11,7 +11,12 @@ $db = get_db_connection();
 if ($db) {
 	$ajaxResult["sqlConnectSuccess"] = true;
 
+	# read parameters
+	$_POST = json_decode(file_get_contents('php://input'), true);
+
 	# execute query
+	$ajaxResult["updateTime"] = $db->query("select NOW()")->fetch_row()[0];
+
 	$queryResult = $db->query("call getRoomList()");
 	if ($queryResult) {
 		$roomList = $queryResult->fetch_all(MYSQLI_ASSOC);

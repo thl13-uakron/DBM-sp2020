@@ -16,6 +16,8 @@ if ($db) {
 	$_POST = json_decode(file_get_contents('php://input'), true);
 	$roomID = $db->real_escape_string($_POST["roomID"]);
 
+	$ajaxResult["updateTime"] = $db->query("select NOW()")->fetch_row()[0];
+
 	# execute query
 	$queryResult = $db->query("call getRoomInfo('$roomID')");
 	if ($queryResult) {
