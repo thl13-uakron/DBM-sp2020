@@ -38,6 +38,10 @@
 		background-color:darkgray;
 	}
 
+	.message:hover {
+		background-color: #E8E8E8;
+	}
+
 	.clickableListing:hover {
 		background-color:#202020;
 		cursor:pointer;
@@ -911,7 +915,7 @@
 		}
 	}
 
-	function showPage(userID, password, channelID, roomID) {
+	function showPage(userID, password, roomID, channelID) {
 		showRoomLists(userID, password);
 		showAccountInfo(userID, password);
 		enterChannel(userID, password, roomID, channelID);
@@ -1027,7 +1031,7 @@
 	}
 	else {
 		// render page content otherwise
-		showPage(userID, password, channelID, roomID);
+		showPage(userID, password, roomID, channelID);
 	}
 
 </script>
