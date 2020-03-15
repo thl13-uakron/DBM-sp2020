@@ -141,7 +141,7 @@
 	#centerRegion {
 		max-height:100%;
 		width: 56%;
-		background-color: #F0F0F0;
+		background-color: #F0F5F5;
 		color: black;
 	}
 
@@ -173,14 +173,31 @@
 </body>
 
 <script>
-	window.addEventListener("unload", 
-		function() {
-			fetch("PHP/closeConnection.php", {
-				method: "POST"
-			})
-		});
+
+	function closeConnection() {
+		fetch("PHP/closeConnection.php", {
+			method: "POST"
+		})
+	}
+
+	window.addEventListener("unload", closeConnection);
+
+	window.addEventListener("reload", closeConnection);
 
 	var defaultRoomID = 2;
+	var cachedRoomInfo = {};
+	var cachedMessages = {};
+
+	var channelUpdateController = new AbortController();
+	var roomInfoController = new AbortController();
+
+	function abortChannelFetches() {
+		channelUpdateController.abort();
+		channelUpdateController = new AbortController();
+
+		roomInfoController.abort();
+		roomInfoController = new AbortController();
+	}
 
 	// helper function for preventing script injections, copied from https://stackoverflow.com/questions/6234773/can-i-escape-html-special-chars-in-javascript
 	function escapeHTML(unsafe) {
@@ -192,8 +209,18 @@
 	         .replace(/'/g, "&#039;");
 	 }
 
+	// helper function to convert mySQL timestamps to the client's local time, copied from https://stackoverflow.com/questions/3075577/convert-mysql-datetime-stamp-into-javascripts-date-format
+	function convertDateTime(dateTime) {
+		var t = dateTime.split(/[- :]/);
+
+		// Apply each element to the Date function
+		var d = new Date(Date.UTC(t[0], t[1]-1, t[2], t[3], t[4], t[5]));
+
+		return d.toDateString() + " at " + d.toLocaleTimeString();
+	}
+
 	// functions for retrieving data from backend and dynamically generating page content
-	function getListedChannelElement(channelInfo, roomInfo, currentChannelID) {
+	function getListedChannelElement(channelInfo, roomID, currentChannelID) {
 		var element = document.createElement("div");
 		var elementID = "channel" + channelInfo["channelID"];
 		element.id = elementID;
@@ -224,10 +251,25 @@
 
 		element.addEventListener("click", function() {
 			channelID = channelInfo["channelID"];
-			enterChannel(userID, password, roomInfo["roomID"], channelID);
+			enterChannel(userID, password, roomID, channelID);
 		});
 
 		return element;
+	}
+
+	function showChannels(userID, password, channelList, roomID) {
+		if (document.getElementById("roomInfo").dataset.roomID == roomID) {
+			var channelListBody = document.getElementById("channelListBody");
+			for (i in channelList) {
+				var channelElement = document.getElementById("channel" + channelList[i]["channelID"]);
+				if (!channelElement) {
+					channelListBody.appendChild(getListedChannelElement(channelList[i], roomInfo, channelID));
+				}
+				else {
+					channelElement = getListedChannelElement(channelList[i], roomInfo, channelID);
+				}
+			}
+		}
 	}
 
 	function getRoomInfoUpdates(userID, password, roomID, channelID, lastUpdateTime) {
@@ -236,13 +278,16 @@
 
 	function showRoomInfo(userID, password, roomID, channelID) {
 		var parent = document.getElementById("roomInfo");
+		roomInfoController = new AbortController();
+		roomInfoSignal = roomInfoController.signal;
 		fetch("PHP/getChannelInfo.php", {
 			method: "POST",
 			body: JSON.stringify({
 				userID: userID,
 				password: password,
 				channelID: channelID,
-			})
+			}),
+			signal: roomInfoSignal
 		})
 		.then(response => response.text())
 		.then(data => {
@@ -264,22 +309,82 @@
 					}
 
 					// display room info if not already displayed
-					fetch("PHP/getRoomInfo.php", {
-						method: "POST",
-						body: JSON.stringify({
-							userID: userID,
-							password: password,
-							roomID: roomID 
-						})
-					})
-					.then(response => response.text())
-					.then(data => {
-						console.log(data);
-						data = JSON.parse(data);
+					if (parent.dataset.roomID != roomID) {
+						parent.dataset.roomID = roomID;
+						if (!cachedRoomInfo[roomID]) {
+							fetch("PHP/getRoomInfo.php", {
+								method: "POST",
+								body: JSON.stringify({
+									userID: userID,
+									password: password,
+									roomID: roomID 
+								}),
+								signal: roomInfoSignal
+							})
+							.then(response => response.text())
+							.then(data => {
+								console.log(data);
+								data = JSON.parse(data);
 
-						if (parent.dataset.roomID != roomID) {
-							parent.dataset.roomID = roomID;
-							roomInfo = data["roomInfo"];
+								roomInfo = data["roomInfo"];
+								updateTime = data["updateTime"];
+								cachedRoomInfo[roomID] = {"roomInfo": roomInfo, "updateTime": updateTime};
+								parent.innerHTML = `
+								<div id="roomInfoHeader" class="padded">
+									<span class="lightGrayText"><b> Current Room: <span id="roomNameElement"></span></b> </span> 
+									(roomID: <span id="roomIDElement"> </span>)
+									<br />
+									<i><span class="smallText grayText"> Created by <span id="creatorNameElement"></span> (userID: <span id="creatorIDElement"></span>) 
+									on <span id="creationDateElement"></span> </span></i>
+								</div>
+								<div id="roomDescriptionElement"> </div>
+								<div id="channelListElement"> 
+									<div id="channelListHeader" class="padded silverText"> <b> Channels in this Room </b> </div>
+									<div id="channelListBody" class="bottomMargin"> </div>
+								</div>
+								`;
+
+								document.getElementById("roomNameElement").innerHTML = escapeHTML(roomInfo["roomName"]);
+								document.getElementById("roomIDElement").innerHTML = roomID;
+								document.getElementById("creatorNameElement").innerHTML = escapeHTML(roomInfo["creatorName"]);
+								document.getElementById("creatorIDElement").innerHTML = roomInfo["creatorID"];
+								document.getElementById("creationDateElement").innerHTML = convertDateTime(roomInfo["creationDate"]);
+
+								if (roomInfo["description"]) {
+									var roomDescriptionElement = document.getElementById("roomDescriptionElement");
+									roomDescriptionElement.className = "padded bottomMargin";
+									roomDescriptionElement.innerHTML = escapeHTML(roomInfo["description"])
+								}
+
+								fetch("PHP/getChannelsByRoom.php", {
+									method: "POST",
+									body: JSON.stringify({
+										roomID: roomID 
+									})
+								})
+								.then(response => response.text())
+								.then(data => {
+									console.log(data);
+									data = JSON.parse(data);
+
+									channelList = data["channelList"];
+									cachedRoomInfo[roomID]["channelList"] = channelList;
+									showChannels(userID, password, channelList, roomID);
+
+									// poll for future updates
+									getRoomInfoUpdates(userID, password, roomID, channelID, updateTime);
+								})
+								.catch(error => console.log(error));
+
+							})
+							.catch(error => console.log(error));
+						}
+						else {
+							// get room info from memory if already stored there
+							roomInfo = cachedRoomInfo[roomID]["roomInfo"];
+							channelList = cachedRoomInfo[roomID]["channelList"];
+							updateTime = cachedRoomInfo[roomID]["updateTime"];
+
 							parent.innerHTML = `
 							<div id="roomInfoHeader" class="padded">
 								<span class="lightGrayText"><b> Current Room: <span id="roomNameElement"></span></b> </span> 
@@ -299,7 +404,7 @@
 							document.getElementById("roomIDElement").innerHTML = roomID;
 							document.getElementById("creatorNameElement").innerHTML = escapeHTML(roomInfo["creatorName"]);
 							document.getElementById("creatorIDElement").innerHTML = roomInfo["creatorID"];
-							document.getElementById("creationDateElement").innerHTML = roomInfo["creationDate"];
+							document.getElementById("creationDateElement").innerHTML = convertDateTime(roomInfo["creationDate"]);
 
 							if (roomInfo["description"]) {
 								var roomDescriptionElement = document.getElementById("roomDescriptionElement");
@@ -307,46 +412,26 @@
 								roomDescriptionElement.innerHTML = escapeHTML(roomInfo["description"])
 							}
 
-							fetch("PHP/getChannelsByRoom.php", {
-								method: "POST",
-								body: JSON.stringify({
-									roomID: roomID 
-								})
-							})
-							.then(response => response.text())
-							.then(data => {
-								console.log(data);
-								data = JSON.parse(data);
+							showChannels(userID, password, channelList, roomID);
 
-								channelList = data["channelList"]
-								var channelListBody = document.getElementById("channelListBody");
-								channelListBody.innerHTML = "";
-								for (i in channelList) {
-									channelListBody.appendChild(getListedChannelElement(channelList[i], roomInfo, channelID));
-								}
-
-								// poll for future updates
-								getRoomInfoUpdates(userID, password, roomID, channelID, data["updateTime"]);
-							})
-							.catch(error => console.log(error));
+							// poll for future updates
+							getRoomInfoUpdates(userID, password, roomID, channelID, updateTime);
 						}
-						else {
-							// update channel list if already in room
-							var previousChannelListing = document.getElementsByClassName("channelListing selectedListing")[0];
-							if (previousChannelListing && previousChannelListing.dataset.channelID != channelID) {
-								previousChannelListing.className = previousChannelListing.className.replace('selectedListing', "clickableListing");
-								var channelListing = document.getElementById("channel" + channelID);
-								if (channelListing) {
-									channelListing.className = channelListing.className.replace("clickableListing", "selectedListing");
-								}
+					}
+					else {
+						// update channel list if already in room
+						var previousChannelListing = document.getElementsByClassName("channelListing selectedListing")[0];
+						if (previousChannelListing && previousChannelListing.dataset.channelID != channelID) {
+							previousChannelListing.className = previousChannelListing.className.replace('selectedListing', "clickableListing");
+							var channelListing = document.getElementById("channel" + channelID);
+							if (channelListing) {
+								channelListing.className = channelListing.className.replace("clickableListing", "selectedListing");
 							}
 						}
-
-					})
-					.catch(error => console.log(error));
+					}
 				}
 				else {
-					//
+					// handle DM channels that are independent of rooms
 				}
 			}
 			else {
@@ -677,6 +762,12 @@
 		.catch(error => console.log(error));
 	}
 
+	function formatMessage(messageContent) {
+		messageContent = escapeHTML(messageContent);
+		// messageContent.replace(/\n/g, "<br />");
+		return messageContent;
+	}
+
 	function getMessageElement(messageInfo) {
 		var parent = document.getElementById("messageStream");
 
@@ -693,7 +784,7 @@
 		<div>
 			<span id="`+ elementID + `screenName" class="boldText">` + escapeHTML(messageInfo["screenName"]) + `</span>  
 			(userID <span id="`+ elementID + `userID">` + messageInfo["userID"] + `</span>)
-			<span class="grayText" id="`+ elementID + `sendTime"> ` + messageInfo["sendTime"] + ` </span>
+			<span class="grayText" id="`+ elementID + `sendTime"> ` + convertDateTime(messageInfo["sendTime"]) + ` </span>
 			<span class="grayText" id="`+ elementID + `editTime"></span>
 		</div>
 		`;
@@ -701,7 +792,7 @@
 		var messageBody = document.createElement("div");
 		element.appendChild(messageBody);
 		messageBody.className = "bottomMargin";
-		messageBody.innerHTML = escapeHTML(messageInfo["content"]);
+		messageBody.innerHTML = formatMessage(messageInfo["content"]);
 
 		/*
 		var messageFooter = document.createElement("div");
@@ -713,9 +804,38 @@
 		return element;
 	}
 
+	function showMessages(userID, password, messageList, channelID) {
+		if (!cachedMessages[channelID]) {
+			cachedMessages[channelID] = {"messageList": messageList};
+		}
+
+		parent = document.getElementById("messageStream");
+		for (i in messageList) {
+			// exit if no longer viewing current channel
+			if (!parent || parent.dataset.channelID != channelID) return;
+
+			messageElement = document.getElementById("message" + messageList[i]["messageID"]);
+			if (!messageElement) {
+				parent.appendChild(getMessageElement(messageList[i]));
+				cachedMessages[channelID]["messageList"].push(messageList[i]);
+			}
+			else {
+				messageElement = getMessageElement(messageList[i]);
+				for (j in cachedMessages[channelID]["messageList"]) {
+					if (cachedMessages[channelID]["messageList"][j]["messageID"] == messageList[i]["messageID"]) {
+						cachedMessages[channelID]["messageList"][j] = messageList[i];
+						break;
+					}
+				}
+			}
+		}
+	}
+
 	function getChatUpdates(userID, password, channelID, lastUpdateTime) {
 		var parent = document.getElementById("messageStream");
 		if (!parent || parent.dataset.channelID != channelID) return;
+		channelUpdateController.abort();
+		channelUpdateController = new AbortController();
 		fetch("PHP/getChannelUpdates.php", {
 			method: "POST",
 			body: JSON.stringify({
@@ -723,7 +843,8 @@
 				password: password,
 				channelID: channelID,
 				lastUpdateTime: lastUpdateTime
-			})
+			}),
+			signal: channelUpdateController.signal
 		})
 		.then(response => response.text())
 		.then(data => {
@@ -738,15 +859,8 @@
 			// display new messages
 			newMessages = data["newMessages"];
 			if (newMessages) {
-				for (i in newMessages) {
-					// exit if no longer viewing current channel
-					parent = document.getElementById("messageStream");
-					if (!parent || parent.dataset.channelID != channelID) return;
-
-					// ignore messages that are already present in stream
-					if (!document.getElementById("message" + newMessages[i]["messageID"]))
-						parent.appendChild(getMessageElement(newMessages[i]));
-				}
+				showMessages(userID, password, newMessages, channelID);
+				cachedMessages[channelID]["updateTime"] = data["updateTime"];
 			}
 
 			// keep message stream scrolled to bottom if currently scrolled to bottom
@@ -788,33 +902,45 @@
 		var sendButton = document.getElementById("sendButton");
 
 		messageStream.innerHTML = "Loading Messages...";
-		fetch("PHP/getMessages.php", {
-			method: "POST",
-			body: JSON.stringify({
-				userID: userID,
-				password: password,
-				channelID: channelID 
+		if (!cachedMessages[channelID]) {
+			fetch("PHP/getMessages.php", {
+				method: "POST",
+				body: JSON.stringify({
+					userID: userID,
+					password: password,
+					channelID: channelID 
+				})
 			})
-		})
-		.then(response => response.text())
-		.then(data => {
-			console.log(data);
-			data = JSON.parse(data);
+			.then(response => response.text())
+			.then(data => {
+				console.log(data);
+				data = JSON.parse(data);
 
-			// display existing messages
+				// display existing messages
+				messageStream.innerHTML = `<div class="padded bottomMargin"> Start of message stream for Channel ` + channelID + ` </div>`;
+				var messageList = data["messageList"];
+				showMessages(userID, password, messageList, channelID);
+				cachedMessages[channelID]["updateTime"] = data["updateTime"];
+
+				// scroll to bottom of message stream
+				messageStream.scrollTop = messageStream.scrollHeight - messageStream.clientHeight;
+
+				// check for future updates
+				getChatUpdates(userID, password, channelID, data["updateTime"]);
+			})
+			.catch(error => console.log(error));
+		}
+		else {
+			// show messages already stored in memory
 			messageStream.innerHTML = `<div class="padded bottomMargin"> Start of message stream for Channel ` + channelID + ` </div>`;
-			var messageList = data["messageList"];
-			for (i in messageList) {
-				messageStream.appendChild(getMessageElement(messageList[i]));
-			}
+			showMessages(userID, password, cachedMessages[channelID]["messageList"], channelID);
+
+			// get additional updates
+			getChatUpdates(userID, password, channelID, cachedMessages[channelID]["updateTime"]);
 
 			// scroll to bottom of message stream
 			messageStream.scrollTop = messageStream.scrollHeight - messageStream.clientHeight;
-
-			// check for future updates
-			getChatUpdates(userID, password, channelID, data["updateTime"]);
-		})
-		.catch(error => console.log(error));
+		}
 
 		// set styling for input box
 		chatInput.maxlength = 512;
@@ -840,29 +966,34 @@
 			}
 		});
 		sendButton.addEventListener("click", function() {
-			var messageContent = chatInput.value;
+			if (chatInput.value.length > 0) {
+				var messageContent = chatInput.value;
 
-			chatInput.readonly = true;
-			chatInput.value = "Sending...";
-			sendButton.disabled = true;
+				chatInput.readonly = true;
+				chatInput.value = "Sending...";
+				sendButton.disabled = true;
 
-			fetch("PHP/postMessage.php", {
-				method: "POST",
-				body: JSON.stringify({
-					userID: userID,
-					password: password,
-					channelID: channelID,
-					content: messageContent
+				fetch("PHP/postMessage.php", {
+					method: "POST",
+					body: JSON.stringify({
+						userID: userID,
+						password: password,
+						channelID: channelID,
+						content: messageContent
+					})
 				})
-			})
-			.then(response => response.text())
-			.then(data => {
-				console.log(data);
+				.then(response => response.text())
+				.then(data => {
+					console.log(data);
 
-				chatInput.readonly = false;
-				chatInput.value = "";
-			})
-			.catch(error => console.log(error));
+					chatInput.readonly = false;
+					chatInput.value = "";
+				})
+				.catch(error => console.log(error));
+			}
+			else {
+				sendButton.disabled = true;
+			}
 		})
 	}
 
@@ -898,6 +1029,8 @@
 	}
 
 	function enterChannel(userID, password, roomID, channelID) {
+		abortChannelFetches();
+
 		if (channelID) {
 			// record channelID and display channel information and chat stream
 			document.cookie = "channelID=" + channelID;
@@ -958,7 +1091,7 @@
 		# get channel ID from cookie if GET parameter not present or invalid
 		if (!$channelID && (array_key_exists("channelID", $_COOKIE)) && !(array_key_exists("roomID", $_GET))) {
 			# reset db connection
-			$free_all_results($db);
+			free_all_results($db);
 
 			$channelID = $_COOKIE["channelID"];
 			if (!isValidChannel($db, $channelID)) {
