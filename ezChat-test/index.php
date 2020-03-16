@@ -21,7 +21,7 @@
 		display: flex;
 		flex-direction: row;
 		flex-wrap: nowrap;
-		overflow-wrap: all;
+		overflow-wrap: break-word;
 		background-color: black;
 		color: darkgray;
 		font-family: arial;
@@ -36,6 +36,10 @@
 
 	button:disabled {
 		background-color:darkgray;
+	}
+
+	textarea {
+		font-family: arial;
 	}
 
 	.message:hover {
@@ -119,11 +123,15 @@
 	}
 
 	#messageStream {
+		height: 80%;
+		bottom: 20%;
+	}
+
+	#roomCreationPanel, #messageStream {
+		overflow-y: auto;
 		position:fixed;
 		box-sizing: border-box;
 		width: 56%;
-		height: 80%;
-		bottom: 20%;
 	}
 
 	#chatBox {
@@ -141,7 +149,7 @@
 	#centerRegion {
 		max-height:100%;
 		width: 56%;
-		background-color: #F0F5F5;
+		background-color: #F0F0F0;
 		color: black;
 	}
 
@@ -190,6 +198,7 @@
 
 	var channelUpdateController = new AbortController();
 	var roomInfoController = new AbortController();
+	var roomListUpdateController = new AbortController();
 
 	function abortChannelFetches() {
 		channelUpdateController.abort();
@@ -441,7 +450,98 @@
 		})
 	}
 
-	function getListedRoomElement(roomInfo, currentRoomID) {
+	function showRoomCreation(userID, password) {
+		var parent = document.getElementById("centerRegion");
+		channelUpdateController.abort();
+		channelUpdateController = new AbortController;
+		parent.innerHTML = `
+		<div id="roomCreationPanel" class="padded" style="overflow-y: auto">
+			<div class="padded boldText">
+				Create a New Room
+			</div>
+			<div class="padded">
+				Room Name (1-32 characters): <input id="newRoomName" maxlength=32> </input>
+			</div>
+			<div class="padded">
+				Room Description (max 128 characters, optional): 
+				<br />
+				<textarea id="newRoomDescription" maxlength=128></textarea>
+			</div>
+			<div class="padded">
+				<input type="radio" name="newRoomAccess" id="roomIsBrowsable" checked> Room appears in public list </input>
+				<br />
+				<input type="radio" name="newRoomAccess" id="roomIsNotBrowsable"> Room is only accessible by URL </input>
+			</div>
+			<div class="padded">
+				<button id="roomCreationBackButton"> Go Back </button>
+				<button id="roomCreationGoButton"> Create Room </button>
+			</div>
+			<div class="padded" id="roomCreationStatus">
+			</div>
+		</div>
+		`;
+
+		var roomCreationController = new AbortController();
+
+		var roomCreationBackButton = document.getElementById("roomCreationBackButton");
+		roomCreationBackButton.addEventListener("click", function() {
+			roomCreationController.abort();
+			enterChannel(userID, password, roomID, channelID);
+		})
+		var roomCreationGoButton = document.getElementById("roomCreationGoButton");
+		roomCreationGoButton.disabled = true;
+
+		var roomCreationStatus = document.getElementById("roomCreationStatus");
+		var roomNameInput = document.getElementById("newRoomName");
+		var roomDescriptionInput = document.getElementById("newRoomDescription");
+
+		roomNameInput.addEventListener("keydown", function() {
+			if (roomNameInput.value.length > 0) {
+				roomCreationGoButton.disabled = false;
+			}
+			else {
+				roomCreationGoButton.disabled = true;
+			}
+		});
+
+		roomCreationGoButton.addEventListener("click", function() {
+			if (roomNameInput.value.length > 0) {
+				roomCreationStatus.innerHTML = "Creating...";
+				fetch("PHP/addRoom.php", {
+					method: "POST",
+					body: JSON.stringify({
+						roomName: roomNameInput.value,
+						description: roomDescriptionInput.value,
+						browsable: document.getElementById("roomIsBrowsable").checked,
+						public: true,
+						creatorID: userID,
+						creatorPassword: password,
+						roomPassword: null,
+					}),
+					signal: roomCreationController.signal
+				})
+				.then(response => response.text()) 
+				.then(data => {
+					console.log(data);
+					data = JSON.parse(data);
+
+					if (data["roomID"]) {
+						roomID = data["roomID"];
+						enterRoom(userID, password, roomID);
+					}
+					else {
+						roomCreationStatus.innerHTML = "Failed to create room. Check the console log for details."
+					}
+				})
+				.catch(error => console.log(error));
+			}
+			else {
+				roomCreationGoButton.disabled = true;
+			}
+		})
+	}
+
+	function getListedRoomElement(roomInfo) {
 		var element = document.createElement("div");
 		var elementID = "room" + roomInfo["roomID"];
 		element.id = elementID;
@@ -481,7 +581,16 @@
 	}
 	function showPublicRooms(userID, password) {
 		var parent = document.getElementById("allRooms");
-		parent.innerHTML = "Loading Room List...";
+		parent.innerHTML = `
+		<div id="allRoomsHeader" class="padded silverText">
+			<b> Public Rooms </b>
+			<div id="createRoomOption"> </div>
+		</div>
+		<div id="allRoomsBody">
+			<span class="padded"> Loading... </span>
+		</div>
+		`;
+
 		fetch("PHP/getRoomList.php", {
 			method: "POST",
 		})
@@ -491,19 +600,13 @@
 			data = JSON.parse(data);
 
 			rooms = data["roomList"];
-			parent.innerHTML = `
-			<div id="allRoomsHeader" class="padded silverText">
-				<b> Public Rooms </b>
-			</div>
-			<div id="allRoomsBody">
-			</div>
-			`;
 
 			var allRoomsBody = document.getElementById("allRoomsBody");
+			allRoomsBody.innerHTML = '';
 
 			for (i in rooms) {
 				if (!document.getElementById("room" + rooms[i]["roomID"])) {
-					allRoomsBody.appendChild(getListedRoomElement(rooms[i], roomID));
+					allRoomsBody.appendChild(getListedRoomElement(rooms[i]));
 				}
 			}
 				
@@ -513,7 +616,44 @@
 		.catch((error) => console.log(error));
 	}
 	function getRoomListUpdates(userID, password, lastUpdateTime) {
-		//
+		roomListUpdateController.abort();
+		roomListUpdateController = new AbortController();
+		fetch("PHP/getRoomListUpdates.php", {
+			method: "POST",
+			body: JSON.stringify({
+				lastUpdateTime: lastUpdateTime
+			}),
+			signal: roomListUpdateController.signal
+		})
+		.then(response => response.text())
+		.then(data => {
+			console.log(data);
+			data = JSON.parse(data);
+
+			var updatedRooms = data["updatedRooms"];
+			// check list of new or updated rooms
+			if (updatedRooms) {
+				for (i in updatedRooms) {
+					var roomListing = document.getElementById("room" + updatedRooms[i]["roomID"]);
+					if (roomListing) {
+						roomListing = getListedRoomElement(updatedRooms[i]);
+					}
+					else {
+						document.getElementById("allRoomsBody").appendChild(getListedRoomElement(updatedRooms[i]));
+					}
+				}
+			}
+
+			// get additional updates
+			setTimeout(() => getRoomListUpdates(userID, password, data["updateTime"]), 2500);
+		})
+		.catch(error => {
+			console.log(error);
+			if (error.name != "AbortError") {
+				// resend request if it timed out but not if it was aborted
+				setTimeout(() => getRoomListUpdates(userID, password, lastUpdateTime), 2500);
+			}
+		})
 	}
 	function showRoomLists(userID, password) { 
 		var parent = document.getElementById("roomList");
@@ -684,6 +824,10 @@
 
 		var loginButton = document.getElementById("loginButton");
 		loginButton.addEventListener("click", showLogin);
+
+		document.getElementById("createRoomOption").innerHTML = `
+		<span class="smallText darkGrayText"> Register or log in to create your own rooms </span>
+		`;
 	}
 
 	function logout() {
@@ -720,6 +864,14 @@
 
 		var signoutButton = document.getElementById("signoutButton");
 		signoutButton.addEventListener("click", showSignout);
+
+		document.getElementById("createRoomOption").innerHTML = `
+		<button id="createRoomButton" style="margin-top:3px"> Create New Room </button>
+		`;
+
+		document.getElementById("createRoomButton").addEventListener("click", function () {
+			showRoomCreation(userID, password);
+		});
 	}
 
 	function showAccountInfo(userID, password) {
@@ -875,7 +1027,9 @@
 		})
 		.catch(error => {
 			console.log(error);
-			setTimeout(() => { getChatUpdates(userID, password, channelID, lastUpdateTime); }, 1000);
+			if (error.name != "AbortError") {
+				setTimeout(() => { getChatUpdates(userID, password, channelID, lastUpdateTime); }, 1000);
+			}
 		})
 	}
 

@@ -27,7 +27,7 @@ if ($db) {
 	$queryResult = $db->query("select validateUser('$creatorID', '$creatorPassword', false)");
 	if ($queryResult) {
 		# execute main query
-		if ($userID != null && $queryResult->fetch_row()[0]) {
+		if ($creatorID != null && $queryResult->fetch_row()[0]) {
 			$queryResult = $db->query("call addRoom('$roomName', '$description', '$browsable', '$public', '$roomPassword', '$creatorID', @p_roomID)");
 			if ($queryResult) {
 				$queryResult = $db->query("select @p_roomID");

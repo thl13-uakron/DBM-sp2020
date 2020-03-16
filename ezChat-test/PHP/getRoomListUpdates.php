@@ -1,6 +1,6 @@
 <?php
-# This script returns the list of new messages, along with edited and deleted and any changes to the channel settings,
-# posted to a channel since the previous update, taking the ID of the channel and the time of the previous update
+# This script returns a list of any rooms that have been deleted, modified, or created since the last time this script
+# returned results
 
 # initialize result array
 $ajaxResult = array();
@@ -14,10 +14,7 @@ if ($db) {
 
 	# read parameters
 	$_POST = json_decode(file_get_contents('php://input'), true);
-	$channelID = $db->real_escape_string($_POST["channelID"]);
 	$lastUpdateTime = $db->real_escape_string($_POST["lastUpdateTime"]);
-
-	$ajaxResult["channelID"] = $channelID;
 
 	# poll for updates
 	$updatesDetected = false;
@@ -31,17 +28,15 @@ if ($db) {
 		}
 		$ajaxResult["updateTime"] = $queryResult->fetch_array()[0];
 
-		# check changes in permissions
-
-		# check new and updated messages 
-		$queryResult = $db->query("call getNewMessages('$channelID', '$lastUpdateTime')");
+		# check new and updated rooms
+		$queryResult = $db->query("call getRoomListUpdates('$lastUpdateTime')");
 		if ($queryResult) {
-			$newMessages = $queryResult->fetch_all(MYSQLI_ASSOC);
+			$updatedRooms = $queryResult->fetch_all(MYSQLI_ASSOC);
 
 			# record data and break loop if updates are detected
-			if (count($newMessages) > 0) {
+			if (count($updatedRooms) > 0) {
 				$ajaxResult["querySuccess"] = true;
-				$ajaxResult["newMessages"] = $newMessages;
+				$ajaxResult["updatedRooms"] = $updatedRooms;
 				$updatesDetected = true;
 			}
 		}
@@ -52,13 +47,11 @@ if ($db) {
 			break;
 		}
 
-		# check deleted messages
-
-		# check name changes
+		# check deleted rooms
 
 		# free results
 		if (!$updatesDetected) {
-			sleep(0.7);
+			sleep(2.5);
 			free_all_results($db);
 		}
 	}
