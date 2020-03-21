@@ -17,6 +17,11 @@ if ($db) {
 	$channelName = $db->real_escape_string($_POST["channelName"]);
 	$description = $db->real_escape_string($_POST["description"]);
 	$roomID = $db->real_escape_string($_POST["roomID"]);
+	$sessionID = $db->real_escape_string($_POST["sessionID"]);
+
+	$queryResult = $db->query("select getSessionUser('$sessionID')");
+	$userID = $queryResult->fetch_row()[0];
+	free_all_results($db);
 
 	# execute query
 	$queryResult = $db->query("call addChannel('$channelName', '$description', '$roomID', @p_channelID)");

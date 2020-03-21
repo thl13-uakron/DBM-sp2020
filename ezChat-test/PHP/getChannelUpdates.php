@@ -16,8 +16,13 @@ if ($db) {
 	$_POST = json_decode(file_get_contents('php://input'), true);
 	$channelID = $db->real_escape_string($_POST["channelID"]);
 	$lastUpdateTime = $db->real_escape_string($_POST["lastUpdateTime"]);
+	$sessionID = $db->real_escape_string($_POST["sessionID"]);
 
 	$ajaxResult["channelID"] = $channelID;
+
+	$queryResult = $db->query("select getSessionUser('$sessionID')");
+	$userID = $queryResult->fetch_row()[0];
+	free_all_results($db);
 
 	# poll for updates
 	$updatesDetected = false;
@@ -55,11 +60,29 @@ if ($db) {
 		# check deleted messages
 
 		# check name changes
+		free_all_results($db);
+		$queryResult = $db->query("call getNameChanges('$channelID', '$lastUpdateTime')");
+		if ($queryResult) {
+			$nameChanges = $queryResult->fetch_all(MYSQLI_ASSOC);
+
+			$count = count($nameChanges);
+			if ($count > 0) {
+				$ajaxResult["nameChanges"] = array();
+				for ($i = 0; $i < $count; ++$i) {
+					$ajaxResult["nameChanges"][$nameChanges[i]["userID"]] = $nameChanges[i]["screenName"];
+				}
+			}
+		}
+		else {
+			# indicate if errors occur
+			$ajaxResult["errorCode"] = $db->errno;
+		}
 
 		# free results
 		if (!$updatesDetected) {
-			sleep(0.7);
 			free_all_results($db);
+			if (connection_aborted()) exit();
+			sleep(0.6);
 		}
 	}
 }

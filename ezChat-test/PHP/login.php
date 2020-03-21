@@ -21,11 +21,23 @@ if ($db) {
 	$queryResult = $db->query("select login('$username', '$password')"); 
 	if ($queryResult) {
 		# parse query results
-		$id = $queryResult->fetch_row()[0];
+		$userID = $queryResult->fetch_row()[0];
 
 		# record data
 		$ajaxResult["querySuccess"] = true;
-		$ajaxResult["userID"] = $id;
+		$ajaxResult["userID"] = $userID;
+
+		free_all_results($db);
+		if ($db->query("call setSession('$userID', @p_sessionID)")) {
+			$queryResult = $db->query("select @p_sessionID");
+
+			$sessionID = $queryResult->fetch_row()[0];
+			$ajaxResult["sessionID"] = $sessionID;
+		}
+		else {
+			$ajaxResult["querySuccess"] = false;
+			$ajaxResult["errorCode"] = $db->errno;
+		}
 	}
 	else {
 		$ajaxResult["querySuccess"] = false;

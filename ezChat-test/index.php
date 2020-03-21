@@ -25,6 +25,7 @@
 		background-color: black;
 		color: darkgray;
 		font-family: arial;
+		font-size: 15px;
 		line-height: 1.2;
 		margin:0;
 	}
@@ -120,24 +121,25 @@
 
 	#messageStream, #roomList, #userList {
 		overflow-y: auto;
+		box-sizing: border-box;
 	}
 
 	#messageStream {
 		height: 80%;
 		bottom: 20%;
+		font-size: 14px;
 	}
 
 	#roomCreationPanel, #messageStream {
-		overflow-y: auto;
 		position:fixed;
-		box-sizing: border-box;
-		width: 56%;
+		overflow-y: auto;
+		width: 60%;
 	}
 
 	#chatBox {
 		position:fixed;
 		box-sizing: border-box;
-		width: 56%;
+		width: 60%;
 		bottom: 0;
 		display: flex;
 		background-color: #C0C0C0;
@@ -148,22 +150,33 @@
 
 	#centerRegion {
 		max-height:100%;
-		width: 56%;
+		width: 60%;
 		background-color: #F0F0F0;
 		color: black;
 	}
 
 	#leftRegion, #rightRegion {
-		width:22%;
+		width: 20%;
+		bottom: 0%;
+	}
+
+	#leftScrollbox, #rightScrollbox {
+		width: 20%;
+		height: 100%;
+		position:fixed;
+		box-sizing: border-box;
+		overflow-y: auto;
 	}
 </style>
 
 <body>
 	<div id="leftRegion" class="region">
-		<div id="roomInfo" class="padded bottomMargin">
-		</div>
+		<div id="leftScrollbox">
+			<div id="roomInfo" class="padded bottomMargin">
+			</div>
 
-		<div id="roomList" class="padded">
+			<div id="roomList" class="padded">
+			</div>
 		</div>
 	</div>
 
@@ -172,10 +185,12 @@
 	</div>
 
 	<div id="rightRegion" class="region">
-		<div id="accountInfo" class="padded bottomMargin">
-		</div>
+		<div id="rightScrollbox">
+			<div id="accountInfo" class="padded bottomMargin">
+			</div>
 
-		<div id="userList" class="padded" style="flex-grow: 2">
+			<div id="userList" class="padded" style="flex-grow: 2">
+			</div>
 		</div>
 	</div>
 </body>
@@ -260,13 +275,13 @@
 
 		element.addEventListener("click", function() {
 			channelID = channelInfo["channelID"];
-			enterChannel(userID, password, roomID, channelID);
+			enterChannel(roomID, channelID);
 		});
 
 		return element;
 	}
 
-	function showChannels(userID, password, channelList, roomID) {
+	function showChannels(channelList, roomID) {
 		if (document.getElementById("roomInfo").dataset.roomID == roomID) {
 			var channelListBody = document.getElementById("channelListBody");
 			for (i in channelList) {
@@ -281,19 +296,20 @@
 		}
 	}
 
-	function getRoomInfoUpdates(userID, password, roomID, channelID, lastUpdateTime) {
+	function getRoomInfoUpdates(roomID, channelID, lastUpdateTime) {
 		//
 	}
 
-	function showRoomInfo(userID, password, roomID, channelID) {
+	function showRoomInfo(roomID, channelID) {
 		var parent = document.getElementById("roomInfo");
 		roomInfoController = new AbortController();
 		roomInfoSignal = roomInfoController.signal;
 		fetch("PHP/getChannelInfo.php", {
 			method: "POST",
 			body: JSON.stringify({
-				userID: userID,
-				password: password,
+				//userID: userID,
+				//password: password,
+				sessionID: sessionID,
 				channelID: channelID,
 			}),
 			signal: roomInfoSignal
@@ -324,8 +340,9 @@
 							fetch("PHP/getRoomInfo.php", {
 								method: "POST",
 								body: JSON.stringify({
-									userID: userID,
-									password: password,
+									// userID: userID,
+									// password: password,
+									sessionID: sessionID,
 									roomID: roomID 
 								}),
 								signal: roomInfoSignal
@@ -378,10 +395,10 @@
 
 									channelList = data["channelList"];
 									cachedRoomInfo[roomID]["channelList"] = channelList;
-									showChannels(userID, password, channelList, roomID);
+									showChannels(channelList, roomID);
 
 									// poll for future updates
-									getRoomInfoUpdates(userID, password, roomID, channelID, updateTime);
+									getRoomInfoUpdates(roomID, channelID, updateTime);
 								})
 								.catch(error => console.log(error));
 
@@ -421,10 +438,10 @@
 								roomDescriptionElement.innerHTML = escapeHTML(roomInfo["description"])
 							}
 
-							showChannels(userID, password, channelList, roomID);
+							showChannels(channelList, roomID);
 
 							// poll for future updates
-							getRoomInfoUpdates(userID, password, roomID, channelID, updateTime);
+							getRoomInfoUpdates(roomID, channelID, updateTime);
 						}
 					}
 					else {
@@ -445,12 +462,12 @@
 			}
 			else {
 				if (!roomID) roomID = defaultRoomID;
-				enterRoom(userID, password, roomID);
+				enterRoom(roomID);
 			}
 		})
 	}
 
-	function showRoomCreation(userID, password) {
+	function showRoomCreation() {
 		var parent = document.getElementById("centerRegion");
 		channelUpdateController.abort();
 		channelUpdateController = new AbortController;
@@ -486,7 +503,7 @@
 		var roomCreationBackButton = document.getElementById("roomCreationBackButton");
 		roomCreationBackButton.addEventListener("click", function() {
 			roomCreationController.abort();
-			enterChannel(userID, password, roomID, channelID);
+			enterChannel(roomID, channelID);
 		})
 		var roomCreationGoButton = document.getElementById("roomCreationGoButton");
 		roomCreationGoButton.disabled = true;
@@ -495,7 +512,7 @@
 		var roomNameInput = document.getElementById("newRoomName");
 		var roomDescriptionInput = document.getElementById("newRoomDescription");
 
-		roomNameInput.addEventListener("keydown", function() {
+		roomNameInput.addEventListener("keyup", function() {
 			if (roomNameInput.value.length > 0) {
 				roomCreationGoButton.disabled = false;
 			}
@@ -514,8 +531,9 @@
 						description: roomDescriptionInput.value,
 						browsable: document.getElementById("roomIsBrowsable").checked,
 						public: true,
-						creatorID: userID,
-						creatorPassword: password,
+						//creatorID: userID,
+						//creatorPassword: password,
+						sessionID: sessionID,
 						roomPassword: null,
 					}),
 					signal: roomCreationController.signal
@@ -527,7 +545,7 @@
 
 					if (data["roomID"]) {
 						roomID = data["roomID"];
-						enterRoom(userID, password, roomID);
+						enterRoom(roomID);
 					}
 					else {
 						roomCreationStatus.innerHTML = "Failed to create room. Check the console log for details."
@@ -567,19 +585,19 @@
 			}
 			element.className = element.className.replace("clickableListing", "selectedListing");*/
 			roomID = roomInfo["roomID"];
-			enterRoom(userID, password, roomID);
+			enterRoom(roomID);
 		});
 		
 		return element;
 	}
 
-	function showDMs(userID, password) {
+	function showDMs() {
 		var parent = document.getElementById("dmList");
 	}
-	function showRecentRooms(userID, password) {
+	function showRecentRooms() {
 		var parent = document.getElementById("recentRooms");
 	}
-	function showPublicRooms(userID, password) {
+	function showPublicRooms() {
 		var parent = document.getElementById("allRooms");
 		parent.innerHTML = `
 		<div id="allRoomsHeader" class="padded silverText">
@@ -593,6 +611,9 @@
 
 		fetch("PHP/getRoomList.php", {
 			method: "POST",
+			body: JSON.stringify({
+				sessionID: sessionID
+			})
 		})
 		.then((response) => response.text())
 		.then((data) => {
@@ -611,17 +632,18 @@
 			}
 				
 			// poll for updates
-			getRoomListUpdates(userID, password, data["updateTime"]);
+			getRoomListUpdates(data["updateTime"]);
 		})
 		.catch((error) => console.log(error));
 	}
-	function getRoomListUpdates(userID, password, lastUpdateTime) {
+	function getRoomListUpdates(lastUpdateTime) {
 		roomListUpdateController.abort();
 		roomListUpdateController = new AbortController();
 		fetch("PHP/getRoomListUpdates.php", {
 			method: "POST",
 			body: JSON.stringify({
-				lastUpdateTime: lastUpdateTime
+				lastUpdateTime: lastUpdateTime,
+				sessionID: sessionID
 			}),
 			signal: roomListUpdateController.signal
 		})
@@ -645,17 +667,17 @@
 			}
 
 			// get additional updates
-			setTimeout(() => getRoomListUpdates(userID, password, data["updateTime"]), 2500);
+			setTimeout(() => getRoomListUpdates(data["updateTime"]), 1200);
 		})
 		.catch(error => {
 			console.log(error);
 			if (error.name != "AbortError") {
 				// resend request if it timed out but not if it was aborted
-				setTimeout(() => getRoomListUpdates(userID, password, lastUpdateTime), 2500);
+				setTimeout(() => getRoomListUpdates(lastUpdateTime), 1200);
 			}
 		})
 	}
-	function showRoomLists(userID, password) { 
+	function showRoomLists() { 
 		var parent = document.getElementById("roomList");
 		parent.innerHTML = 
 		`
@@ -666,19 +688,21 @@
 		<div id="allRooms">
 		</div>
 		`;
-		showDMs(userID, password);
-		showRecentRooms(userID, password);
-		showPublicRooms(userID, password);
+		showDMs();
+		showRecentRooms();
+		showPublicRooms();
 	}
 
-	function login(p_userID, p_password) {
-		userID = p_userID;
-		password = p_password;
+	function login(p_userID, p_password, p_sessionID) {
+		// userID = p_userID;
+		// password = p_password;
+		sessionID = p_sessionID;
 
-		document.cookie = "userID=" + p_userID + "; samesite=strict";
-		document.cookie = "password=" + encodeURIComponent(p_password) + "; samesite=strict";
+		// document.cookie = "userID=" + p_userID + "; samesite=strict";
+		// document.cookie = "password=" + encodeURIComponent(p_password) + "; samesite=strict";
+		document.cookie = "sessionID=" + p_sessionID + "; samesite=strict";
 
-		showPage(userID, password, roomID, channelID);
+		showPage(roomID, channelID);
 	}
 
 	function showLogin() {
@@ -717,7 +741,7 @@
 					console.log(data);
 					data = JSON.parse(data);
 					if (data["userID"]) {
-						login(data["userID"], p_password);
+						login(data["userID"], p_password, data["sessionID"]);
 					}
 					else {
 						loginStatus.innerHTML = "Invalid username or password";
@@ -743,14 +767,11 @@
 		parent = document.getElementById("accountOptions");
 		parent.innerHTML = `
 		<div class="bottomMargin lightGrayText" id="accountCreationHeader"> Create New Account: </div>
-		<div> Username (1-24 characters)
-		<br />
+		<div> Username (1-24 characters) 
 		<input id='usernameInput' class="bottomMargin" maxlength="24"> </input> </div>
-		<div> Password (1-64 characters, restricted chars: ' ', '.')
-		<br />
+		<div> Password (1-64 characters, restricted chars: ' ', '.') 
 		<input id='passwordInput' type="password" class='bottomMargin' maxlength="64"> </input> </div>
-		<div> Confirm Password
-		<br />
+		<div> Confirm Password 
 		<input id='confirmPassword' type="password" class='bottomMargin' maxlength="64"> </input> </div>
 		<div class="bottomMargin"> <button id='signupCancelButton'> Cancel </button> <button id='signupGoButton'> Go </button> </div>
 		<div id='signupStatus'> </div>
@@ -788,7 +809,7 @@
 
 					// assign new account credentials if account successfully created
 					if (data["userID"]) {
-						login(data["userID"], newPassword);
+						login(data["userID"], newPassword, data["sessionID"]);
 					}
 					else {
 						signupStatus.innerHTML = "Unable to create account. Your specified username may have already been taken.";
@@ -831,11 +852,21 @@
 	}
 
 	function logout() {
-		userID = null;
-		password = null;
+		fetch("PHP/clearSession.php", {
+			method: "POST",
+			body: JSON.stringify({
+				sessionID: sessionID
+			})
+		})
+		.catch(error => console.log(error));
 
-		document.cookie = "userID=;";
-		document.cookie = "password=;";
+		// userID = null;
+		// password = null;
+		sessionID = null;
+
+		// document.cookie = "userID=;";
+		// document.cookie = "password=;";
+		document.cookie = "sessionID=;";
 
 		location.reload();
 	}
@@ -856,38 +887,76 @@
 		});
 	}
 
-	function showRegisteredAccountOptions(userID, password) {
+	function showAccountEditing() {
+		parent = document.getElementById("accountOptions");
+		parent.innerHTML = `
+		<div class="bottomMargin lightGrayText" id="accountEditHeader"> Edit Account Details: </div>
+		<div class="bottomMargin">
+			Screen Name (1-32 characters) <input id="screenNameInput"> </input>
+			<br />
+			<span class="smallText grayText"> This is the name that other users see. It doesn't need to be unique. </span>
+		</div>
+		<div class="bottomMargin">
+			Account Name (1-24 characters) <input id="accountNameInput"> </input>
+			<br />
+			<span class="smallText grayText"> This is the name you use for logging in. It has to be unique. </span>
+		</div>
+		<div class="bottomMargin">
+		</div>
+		<div class="bottomMargin"> 
+			<button id='editAccountCancelButton'> Cancel </button> <button id='editAccountGoButton'> Save Changes </button> 
+		</div>
+		`;
+
+		var editAccountCancelButton = document.getElementById("editAccountCancelButton");
+		editAccountCancelButton.addEventListener("click", function() {
+			showRegisteredAccountOptions();
+		});
+		var editAccountGoButton = document.getElementById("editAccountGoButton");
+		editAccountGoButton.disabled = true;
+	}
+
+	function showRegisteredAccountOptions() {
 		parent = document.getElementById("accountOptions");
 		parent.innerHTML = `
 		<button id="signoutButton"> Sign Out </button>
+		<button id="editAccountButton"> Edit Account Info </button>
 		`;
 
 		var signoutButton = document.getElementById("signoutButton");
 		signoutButton.addEventListener("click", showSignout);
+
+		var editAccountButton = document.getElementById("editAccountButton");
+		editAccountButton.addEventListener("click", function() {
+			showAccountEditing();
+		})
 
 		document.getElementById("createRoomOption").innerHTML = `
 		<button id="createRoomButton" style="margin-top:3px"> Create New Room </button>
 		`;
 
 		document.getElementById("createRoomButton").addEventListener("click", function () {
-			showRoomCreation(userID, password);
+			showRoomCreation();
 		});
 	}
 
-	function showAccountInfo(userID, password) {
+	function showAccountInfo() {
 		var parent = document.getElementById("accountInfo");
 		parent.innerHTML = "Loading User Info...";
 		fetch ("PHP/getAccountInfo.php", {
 			method: "POST", 
 			body: JSON.stringify({
-				"userID": userID,
-				"password": password
+				// "userID": userID,
+				// "password": password,
+				"sessionID": sessionID
 			})
 		})
 		.then(response => response.text())
 		.then(data => {
 			console.log(data);
 			data = JSON.parse(data);
+
+			userID = data["userID"];
 
 			parent.innerHTML = `
 			<div id="accountInfoHeader" class="padded">
@@ -904,7 +973,7 @@
 
 			if (data["isRegistered"]) {
 				// options for registered users
-				showRegisteredAccountOptions(userID, password);
+				showRegisteredAccountOptions();
 			}
 			else {
 				// options for guests
@@ -936,8 +1005,8 @@
 		<div>
 			<span id="`+ elementID + `screenName" class="boldText">` + escapeHTML(messageInfo["screenName"]) + `</span>  
 			(userID <span id="`+ elementID + `userID">` + messageInfo["userID"] + `</span>)
-			<span class="grayText" id="`+ elementID + `sendTime"> ` + convertDateTime(messageInfo["sendTime"]) + ` </span>
-			<span class="grayText" id="`+ elementID + `editTime"></span>
+			<span class="grayText smallText" id="`+ elementID + `sendTime"> ` + convertDateTime(messageInfo["sendTime"]) + ` </span>
+			<span class="grayText smallText" id="`+ elementID + `editTime"></span>
 		</div>
 		`;
 
@@ -956,7 +1025,7 @@
 		return element;
 	}
 
-	function showMessages(userID, password, messageList, channelID) {
+	function showMessages(messageList, channelID) {
 		if (!cachedMessages[channelID]) {
 			cachedMessages[channelID] = {"messageList": messageList};
 		}
@@ -983,7 +1052,7 @@
 		}
 	}
 
-	function getChatUpdates(userID, password, channelID, lastUpdateTime) {
+	function getChatUpdates(channelID, lastUpdateTime) {
 		var parent = document.getElementById("messageStream");
 		if (!parent || parent.dataset.channelID != channelID) return;
 		channelUpdateController.abort();
@@ -991,8 +1060,9 @@
 		fetch("PHP/getChannelUpdates.php", {
 			method: "POST",
 			body: JSON.stringify({
-				userID: userID,
-				password: password,
+				//userID: userID,
+				//password: password,
+				sessionID: sessionID,
 				channelID: channelID,
 				lastUpdateTime: lastUpdateTime
 			}),
@@ -1011,7 +1081,7 @@
 			// display new messages
 			newMessages = data["newMessages"];
 			if (newMessages) {
-				showMessages(userID, password, newMessages, channelID);
+				showMessages(newMessages, channelID);
 				cachedMessages[channelID]["updateTime"] = data["updateTime"];
 			}
 
@@ -1023,17 +1093,17 @@
 			}
 
 			// fetch additional updates
-			setTimeout(() => { getChatUpdates(userID, password, channelID, data["updateTime"]); }, 1000);
+			setTimeout(() => { getChatUpdates(channelID, data["updateTime"]); }, 1000);
 		})
 		.catch(error => {
 			console.log(error);
 			if (error.name != "AbortError") {
-				setTimeout(() => { getChatUpdates(userID, password, channelID, lastUpdateTime); }, 1000);
+				setTimeout(() => { getChatUpdates(channelID, lastUpdateTime); }, 1000);
 			}
 		})
 	}
 
-	function showChat(userID, password, channelID) {
+	function showChat(channelID) {
 		var parent = document.getElementById("centerRegion");
 		parent.innerHTML = 
 		`
@@ -1060,10 +1130,12 @@
 			fetch("PHP/getMessages.php", {
 				method: "POST",
 				body: JSON.stringify({
-					userID: userID,
-					password: password,
+					//userID: userID,
+					//password: password,
+					sessionID: sessionID,
 					channelID: channelID 
-				})
+				}),
+				signal: channelUpdateController.signal
 			})
 			.then(response => response.text())
 			.then(data => {
@@ -1073,24 +1145,24 @@
 				// display existing messages
 				messageStream.innerHTML = `<div class="padded bottomMargin"> Start of message stream for Channel ` + channelID + ` </div>`;
 				var messageList = data["messageList"];
-				showMessages(userID, password, messageList, channelID);
+				showMessages(messageList, channelID);
 				cachedMessages[channelID]["updateTime"] = data["updateTime"];
 
 				// scroll to bottom of message stream
 				messageStream.scrollTop = messageStream.scrollHeight - messageStream.clientHeight;
 
 				// check for future updates
-				getChatUpdates(userID, password, channelID, data["updateTime"]);
+				getChatUpdates(channelID, data["updateTime"]);
 			})
 			.catch(error => console.log(error));
 		}
 		else {
 			// show messages already stored in memory
 			messageStream.innerHTML = `<div class="padded bottomMargin"> Start of message stream for Channel ` + channelID + ` </div>`;
-			showMessages(userID, password, cachedMessages[channelID]["messageList"], channelID);
+			showMessages(cachedMessages[channelID]["messageList"], channelID);
 
 			// get additional updates
-			getChatUpdates(userID, password, channelID, cachedMessages[channelID]["updateTime"]);
+			getChatUpdates(channelID, cachedMessages[channelID]["updateTime"]);
 
 			// scroll to bottom of message stream
 			messageStream.scrollTop = messageStream.scrollHeight - messageStream.clientHeight;
@@ -1130,8 +1202,9 @@
 				fetch("PHP/postMessage.php", {
 					method: "POST",
 					body: JSON.stringify({
-						userID: userID,
-						password: password,
+						//userID: userID,
+						//password: password,
+						sessionID: sessionID,
 						channelID: channelID,
 						content: messageContent
 					})
@@ -1151,14 +1224,14 @@
 		})
 	}
 
-	function showUserLists(userID, password, roomID, channelID) {
+	function showUserLists(roomID, channelID) {
 		var parent = document.getElementById("userList");
 		parent.innerHTML =
 		`
 		`;
 	}
 
-	function enterRoom(userID, password, roomID) {
+	function enterRoom(roomID) {
 		// get list of channels associated with room
 		fetch("PHP/getChannelsByRoom.php", {
 			method: "POST",
@@ -1173,16 +1246,16 @@
 
 			if (data["channelList"]) {
 				channelID = data["channelList"][0]["channelID"];
-				enterChannel(userID, password, roomID, channelID);
+				enterChannel(roomID, channelID);
 			}
 			else {
-				enterRoom(userID, password, defaultRoomID);
+				enterRoom(defaultRoomID);
 			}
 		})
 		.catch(error => console.log(error));
 	}
 
-	function enterChannel(userID, password, roomID, channelID) {
+	function enterChannel(roomID, channelID) {
 		abortChannelFetches();
 
 		if (channelID) {
@@ -1190,30 +1263,33 @@
 			document.cookie = "channelID=" + channelID;
 			history.replaceState({channelID: channelID}, "", "?channelID=" + channelID);
 
-			showRoomInfo(userID, password, roomID, channelID);
-			showChat(userID, password, channelID);
-			showUserLists(userID, password, roomID, channelID);
+			showRoomInfo(roomID, channelID);
+			showChat(channelID);
+			showUserLists(roomID, channelID);
 		}
 		else {
 			// get channelID from roomID if channelID is null
 			// move to default room if both roomID and channelID are null
 			if (!roomID) roomID = defaultRoomID;
-			enterRoom(userID, password, roomID, channelID);
+			enterRoom(roomID);
 		}
 	}
 
-	function showPage(userID, password, roomID, channelID) {
-		showRoomLists(userID, password);
-		showAccountInfo(userID, password);
-		enterChannel(userID, password, roomID, channelID);
+	function showPage(roomID, channelID) {
+		showRoomLists();
+		showAccountInfo();
+		enterChannel(roomID, channelID);
 	}
 
 	// get client parameters
-	var userID = `<?php
+	/*var userID = `<?php
 		$userID = null;
 		# get userID from cookie if present
 		if (array_key_exists("userID", $_COOKIE)) {
 			$userID = $_COOKIE["userID"];
+		}
+		if (!$userID && array_key_exists("guestID", $_COOKIE)) {
+			$userID = $_COOKIE["guestID"];
 		}
 		echo $userID;
 	?>`;
@@ -1226,7 +1302,19 @@
 		}
 		echo $password;
 	?>`;
-	password = decodeURIComponent(password);
+	password = decodeURIComponent(password);*/
+
+	var sessionID = `<?php
+		$sessionID = null;
+		# get userID from cookie if present
+		if (array_key_exists("sessionID", $_COOKIE)) {
+			$sessionID = $_COOKIE["sessionID"];
+		}
+		if (!$sessionID && array_key_exists("guestSessionID", $_COOKIE)) {
+			$sessionID = $_COOKIE["guestSessionID"];
+		}
+		echo $sessionID;
+	?>`;
 
 	var channelID = `<?php
 		function isValidChannel($db, $channelID) {
@@ -1294,7 +1382,7 @@
 	}
 
 	// assign guest ID if current ID/password not valid
-	if (!Number(`<?php echo ($userID != null && $db->query("select validateUser('$userID', '$password', true)")->fetch_array()[0]) ?>`)) {
+	if (!sessionID) { // Number(`<?php echo ($userID != null && $db->query("select validateUser('$userID', '$password', true)")->fetch_array()[0]) ?>`)) {
 		fetch("PHP/addUser.php", {
 			method: "POST",
 			headers: {
@@ -1310,15 +1398,20 @@
 			console.log(data);
 			data = JSON.parse(data);
 
-			userID = data["userID"];
+			/*userID = data["userID"];
 			document.cookie = "userID=" + userID + ";samesite=strict";
-			showPage(userID, password, channelID, roomID);
+			document.cookie = "guestID=" + userID + ";samesite=strict";*/
+
+			sessionID = data["sessionID"];
+			document.cookie = "sessionID=" + sessionID + ";samesite=strict";
+			document.cookie = "guestSessionID=" + sessionID + ";samesite=strict";
+			showPage(channelID, roomID);
 		})
 		.catch((error) => console.log(error))
 	}
 	else {
 		// render page content otherwise
-		showPage(userID, password, roomID, channelID);
+		showPage(roomID, channelID);
 	}
 
 </script>

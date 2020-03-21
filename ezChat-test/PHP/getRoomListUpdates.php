@@ -51,8 +51,9 @@ if ($db) {
 
 		# free results
 		if (!$updatesDetected) {
-			sleep(2.5);
 			free_all_results($db);
+			if (connection_aborted()) exit();
+			sleep(1);
 		}
 	}
 }

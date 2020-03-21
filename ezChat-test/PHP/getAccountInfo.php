@@ -14,15 +14,21 @@ if ($db) {
 
 	# read parameters
 	$_POST = json_decode(file_get_contents('php://input'), true);
-	$userID = $db->real_escape_string($_POST["userID"]);
-	$password = $db->real_escape_string($_POST["password"]);
+	# $userID = $db->real_escape_string($_POST["userID"]);
+	# $password = $db->real_escape_string($_POST["password"]);
+	$sessionID = $db->real_escape_string($_POST["sessionID"]);
 
+	$queryResult = $db->query("select getSessionUser('$sessionID')");
 	# validate user ID
-	$queryResult = $db->query("select validateUser('$userID', '$password', true)");
+	# $queryResult = $db->query("select validateUser('$userID', '$password', true)");
 	if ($queryResult) {
-		if ($userID != null && $queryResult->fetch_row()[0]) {
+		$userID = $queryResult->fetch_row()[0];
+		$ajaxResult["userID"] = $userID;
+		free_all_results($db);
+
+		if ($userID != null) { # && $queryResult->fetch_row()[0]) {
 			# get account info
-			$queryResult = $db->query("call getAccountInfo('$userID', '$password')");
+			$queryResult = $db->query("call getAccountInfo('$userID')");
 			if ($queryResult) {
 				# record data
 				$ajaxResult["querySuccess"] = true;

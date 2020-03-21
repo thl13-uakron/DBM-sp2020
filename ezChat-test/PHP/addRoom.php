@@ -19,15 +19,19 @@ if ($db) {
 	$description = $db->real_escape_string($_POST["description"]);
 	$browsable = $db->real_escape_string($_POST["browsable"]);
 	$public = $db->real_escape_string($_POST["public"]);
-	$creatorID = $db->real_escape_string($_POST["creatorID"]);
-	$creatorPassword = $db->real_escape_string($_POST["creatorPassword"]);
+	$sessionID = $db->real_escape_string($_POST["sessionID"]);
+	# $creatorID = $db->real_escape_string($_POST["creatorID"]);
+	# $creatorPassword = $db->real_escape_string($_POST["creatorPassword"]);
 	$roomPassword = $db->real_escape_string($_POST["roomPassword"]);
 
 	# validate ID of creator
-	$queryResult = $db->query("select validateUser('$creatorID', '$creatorPassword', false)");
+	# $queryResult = $db->query("select validateUser('$creatorID', '$creatorPassword', false)");
+	$queryResult = $db->query("select getSessionUser('$sessionID')");
 	if ($queryResult) {
+		$creatorID = $queryResult->fetch_row()[0];
+		free_all_results($db);
 		# execute main query
-		if ($creatorID != null && $queryResult->fetch_row()[0]) {
+		if ($creatorID) { # != null && $queryResult->fetch_row()[0]) {
 			$queryResult = $db->query("call addRoom('$roomName', '$description', '$browsable', '$public', '$roomPassword', '$creatorID', @p_roomID)");
 			if ($queryResult) {
 				$queryResult = $db->query("select @p_roomID");
