@@ -210,6 +210,8 @@
 	var defaultRoomID = 2;
 	var cachedRoomInfo = {};
 	var cachedMessages = {};
+	var lastVisitedChannelByRoom = {};
+	var messageDrafts = {};
 
 	var channelUpdateController = new AbortController();
 	var roomInfoController = new AbortController();
@@ -332,6 +334,9 @@
 							roomListing.className = roomListing.className.replace("clickableListing", "selectedListing");
 						}
 					}
+
+					// log channel
+					lastVisitedChannelByRoom[roomID] = channelID;
 
 					// display room info if not already displayed
 					if (parent.dataset.roomID != roomID) {
@@ -702,7 +707,8 @@
 		// document.cookie = "password=" + encodeURIComponent(p_password) + "; samesite=strict";
 		document.cookie = "sessionID=" + p_sessionID + "; samesite=strict";
 
-		showPage(roomID, channelID);
+		// showPage(roomID, channelID);
+		location.reload();
 	}
 
 	function showLogin() {
@@ -767,12 +773,9 @@
 		parent = document.getElementById("accountOptions");
 		parent.innerHTML = `
 		<div class="bottomMargin lightGrayText" id="accountCreationHeader"> Create New Account: </div>
-		<div> Username (1-24 characters) 
-		<input id='usernameInput' class="bottomMargin" maxlength="24"> </input> </div>
-		<div> Password (1-64 characters, restricted chars: ' ', '.') 
-		<input id='passwordInput' type="password" class='bottomMargin' maxlength="64"> </input> </div>
-		<div> Confirm Password 
-		<input id='confirmPassword' type="password" class='bottomMargin' maxlength="64"> </input> </div>
+		<div> Username (1-24 characters) <br /> <input id='usernameInput' class="bottomMargin" maxlength="24"> </input> </div>
+		<div> Password (1-64 characters) <br /> <input id='passwordInput' type="password" class='bottomMargin' maxlength="64"> </input> </div>
+		<div> Confirm Password <br /> <input id='confirmPassword' type="password" class='bottomMargin' maxlength="64"> </input> </div>
 		<div class="bottomMargin"> <button id='signupCancelButton'> Cancel </button> <button id='signupGoButton'> Go </button> </div>
 		<div id='signupStatus'> </div>
 		`;
@@ -784,12 +787,12 @@
 		var confirmPassword = document.getElementById("confirmPassword");
 		var signupStatus = document.getElementById("signupStatus");
 
-		var restrictedPasswordRegex = new RegExp(".*[\. ].*");
+		// var restrictedPasswordRegex = new RegExp(".*[\. ].*");
 
 		signupCancelButton.addEventListener("click", showGuestAccountOptions);
 		signupGoButton.disabled = true;
 		signupGoButton.addEventListener("click", function() {
-			if (usernameInput.value.length > 0 && passwordInput.value.length > 0 && !passwordInput.value.match(restrictedPasswordRegex) && confirmPassword.value == passwordInput.value) {
+			if (usernameInput.value.length > 0 && passwordInput.value.length > 0 && confirmPassword.value == passwordInput.value) {
 				var newPassword = passwordInput.value;
 				var newUsername = usernameInput.value;
 
@@ -820,7 +823,7 @@
 		});
 		parent.addEventListener("keyup", function() {
 			// check if input fields are valid
-			if (usernameInput.value.length > 0 && passwordInput.value.length > 0 && !passwordInput.value.match(restrictedPasswordRegex) && confirmPassword.value == passwordInput.value) {
+			if (usernameInput.value.length > 0 && passwordInput.value.length > 0 && confirmPassword.value == passwordInput.value) {
 				signupGoButton.disabled = false;
 				signupStatus.innerHTML = "";
 				if (e.keyCode == 13) {
@@ -887,36 +890,96 @@
 		});
 	}
 
-	function showAccountEditing() {
+	function showAccountEditing(accountInfo) {
 		parent = document.getElementById("accountOptions");
 		parent.innerHTML = `
 		<div class="bottomMargin lightGrayText" id="accountEditHeader"> Edit Account Details: </div>
 		<div class="bottomMargin">
-			Screen Name (1-32 characters) <input id="screenNameInput"> </input>
+			Screen Name (1-32 characters) <br /> 
+			<input id="screenNameInput" value="` + accountInfo["screenName"] + `"> </input>
 			<br />
 			<span class="smallText grayText"> This is the name that other users see. It doesn't need to be unique. </span>
 		</div>
 		<div class="bottomMargin">
-			Account Name (1-24 characters) <input id="accountNameInput"> </input>
+			Account Name (1-24 characters) <br /> 
+			<input id="accountNameInput" value="` + accountInfo["accountName"] + `"> </input>
 			<br />
 			<span class="smallText grayText"> This is the name you use for logging in. It has to be unique. </span>
 		</div>
 		<div class="bottomMargin">
+			Current Password <br /> 
+			<input id="currentPasswordInput" type="password"> </input>
+		</div>
+		<div class="bottomMargin">
+			New Password <br /> 
+			<input id="newPasswordInput" type="password"> </input>
+			<br />
+			<span class="smallText grayText"> Leave this blank to keep your current password </span>
 		</div>
 		<div class="bottomMargin"> 
 			<button id='editAccountCancelButton'> Cancel </button> <button id='editAccountGoButton'> Save Changes </button> 
 		</div>
+		<div class="bottomMargin" id="editAccountStatus"> </div>
 		`;
+
+		var accountEditController = new AbortController();
 
 		var editAccountCancelButton = document.getElementById("editAccountCancelButton");
 		editAccountCancelButton.addEventListener("click", function() {
-			showRegisteredAccountOptions();
+			accountEditController.abort();
+			showRegisteredAccountOptions(accountInfo);
 		});
 		var editAccountGoButton = document.getElementById("editAccountGoButton");
 		editAccountGoButton.disabled = true;
+		var editAccountStatus = document.getElementById("editAccountStatus");
+
+		var currentPasswordInput = document.getElementById("currentPasswordInput");
+		var screenNameInput = document.getElementById("screenNameInput");
+		var accountNameInput = document.getElementById("accountNameInput");
+
+		parent.addEventListener("keyup", function() {
+			editAccountStatus.innerHTML = "";
+			if (currentPasswordInput.value.length > 0 && screenNameInput.value.length > 0 && accountNameInput.value.length > 0) {
+				editAccountGoButton.disabled = false;
+			}
+			else {
+				editAccountGoButton.disabled = true;
+			}
+		});
+
+		editAccountGoButton.addEventListener("click", function() {
+			editAccountStatus.innerHTML = "Saving...";
+			fetch("PHP/updateAccountInfo.php", {
+				method: "POST",
+				body: JSON.stringify({
+					sessionID: sessionID,
+					newScreenName: screenNameInput.value,
+					newAccountName: accountNameInput.value,
+					currentPassword: currentPasswordInput.value,
+					newPassword: newPasswordInput.value
+				}),
+				signal: accountEditController.signal
+			})
+			.then(response => response.text())
+			.then(data => {
+				console.log(data);
+				data = JSON.parse(data);
+
+				if (!data["querySuccess"]) {
+					editAccountStatus.innerHTML = "Failed to make changes";
+					if (data["failReason"]) {
+						editAccountStatus.innerHTML += ": " + data["failReason"];
+					}
+				}
+				else {
+					showAccountInfo();
+				}
+			})
+			.then(error => console.log(error));
+		});
 	}
 
-	function showRegisteredAccountOptions() {
+	function showRegisteredAccountOptions(accountInfo) {
 		parent = document.getElementById("accountOptions");
 		parent.innerHTML = `
 		<button id="signoutButton"> Sign Out </button>
@@ -928,7 +991,7 @@
 
 		var editAccountButton = document.getElementById("editAccountButton");
 		editAccountButton.addEventListener("click", function() {
-			showAccountEditing();
+			showAccountEditing(accountInfo);
 		})
 
 		document.getElementById("createRoomOption").innerHTML = `
@@ -973,7 +1036,10 @@
 
 			if (data["isRegistered"]) {
 				// options for registered users
-				showRegisteredAccountOptions();
+				showRegisteredAccountOptions({
+					screenName: data["screenName"], 
+					accountName: data["accountInfo"]["accountName"]
+				});
 			}
 			else {
 				// options for guests
@@ -1000,13 +1066,13 @@
 
 		var messageHeader = document.createElement("div");
 		element.appendChild(messageHeader);
-		messageHeader.className = "bottomMargin rowFlex";
+		messageHeader.className = "bottomMargin rowFlex smallText";
 		messageHeader.innerHTML = `
 		<div>
 			<span id="`+ elementID + `screenName" class="boldText">` + escapeHTML(messageInfo["screenName"]) + `</span>  
 			(userID <span id="`+ elementID + `userID">` + messageInfo["userID"] + `</span>)
-			<span class="grayText smallText" id="`+ elementID + `sendTime"> ` + convertDateTime(messageInfo["sendTime"]) + ` </span>
-			<span class="grayText smallText" id="`+ elementID + `editTime"></span>
+			<span class="grayText" id="`+ elementID + `sendTime"> ` + convertDateTime(messageInfo["sendTime"]) + ` </span>
+			<span class="grayText" id="`+ elementID + `editTime"></span>
 		</div>
 		`;
 
@@ -1078,11 +1144,26 @@
 
 			var scrolledToBottom = parent.scrollHeight - parent.clientHeight <= parent.scrollTop + 1;
 
+			updateTime = lastUpdateTime;
+
 			// display new messages
 			newMessages = data["newMessages"];
 			if (newMessages) {
 				showMessages(newMessages, channelID);
 				cachedMessages[channelID]["updateTime"] = data["updateTime"];
+				updateTime = data["updateTime"];
+			}
+
+			// handle name changes
+			nameChanges = data["nameChanges"];
+			if (nameChanges) {
+				for (i in cachedMessages[channelID]["messageList"]) {
+					var senderID = cachedMessages[channelID]["messageList"][i]["userID"];
+					if (nameChanges[senderID]) {
+						document.getElementById("message" + cachedMessages[channelID]["messageList"][i]["messageID"] + "screenName").innerHTML = escapeHTML(nameChanges[senderID]);
+					}
+				}
+				updateTime = data["updateTime"];
 			}
 
 			// keep message stream scrolled to bottom if currently scrolled to bottom
@@ -1093,7 +1174,7 @@
 			}
 
 			// fetch additional updates
-			setTimeout(() => { getChatUpdates(channelID, data["updateTime"]); }, 1000);
+			setTimeout(() => { getChatUpdates(channelID, updateTime); }, 1000);
 		})
 		.catch(error => {
 			console.log(error);
@@ -1169,13 +1250,20 @@
 		}
 
 		// set styling for input box
-		chatInput.maxlength = 512;
+		chatInput.maxLength = 512;
 		chatInput.style.resize = "none";
 		chatInput.style.rows = 4;
 		chatInput.placeholder = "Type your message here";
 
+		if (messageDrafts[channelID]) {
+			chatInput.value = messageDrafts[channelID];
+		}
+		chatInput.focus();
+
 		// set event handlers
-		sendButton.disabled = true;
+		if (chatInput.value.length == 0) {
+			sendButton.disabled = true;
+		}
 		chatInput.addEventListener("keyup", function(e) {
 			if (e.keyCode == 13 && !e.shiftKey) {
 				// send message if enter pressed
@@ -1189,6 +1277,8 @@
 				else {
 					sendButton.disabled = true;
 				}
+				// save current message contents
+				messageDrafts[channelID] = chatInput.value;
 			}
 		});
 		sendButton.addEventListener("click", function() {
@@ -1197,6 +1287,7 @@
 
 				chatInput.readonly = true;
 				chatInput.value = "Sending...";
+				messageDrafts[channelID] = "";
 				sendButton.disabled = true;
 
 				fetch("PHP/postMessage.php", {
@@ -1232,27 +1323,37 @@
 	}
 
 	function enterRoom(roomID) {
-		// get list of channels associated with room
-		fetch("PHP/getChannelsByRoom.php", {
-			method: "POST",
-			body: JSON.stringify({
-				roomID: roomID 
-			})
-		})
-		.then(response => response.text())
-		.then(data => {
-			console.log(data);
-			data = JSON.parse(data);
+		abortChannelFetches();
 
-			if (data["channelList"]) {
-				channelID = data["channelList"][0]["channelID"];
-				enterChannel(roomID, channelID);
-			}
-			else {
-				enterRoom(defaultRoomID);
-			}
-		})
-		.catch(error => console.log(error));
+		// enter most recently-visted channel in room
+		if (lastVisitedChannelByRoom[roomID]) {
+			channelID = lastVisitedChannelByRoom[roomID];
+			enterChannel(roomID, channelID);
+		}
+		else {
+			// get list of channels associated with room if room not visited before
+			fetch("PHP/getChannelsByRoom.php", {
+				method: "POST",
+				body: JSON.stringify({
+					roomID: roomID 
+				})
+			})
+			.then(response => response.text())
+			.then(data => {
+				console.log(data);
+				data = JSON.parse(data);
+
+				if (data["channelList"]) {
+					// enter first listed channel
+					channelID = data["channelList"][0]["channelID"];
+					enterChannel(roomID, channelID);
+				}
+				else {
+					enterRoom(defaultRoomID);
+				}
+			})
+			.catch(error => console.log(error));
+		}
 	}
 
 	function enterChannel(roomID, channelID) {
@@ -1312,6 +1413,10 @@
 		}
 		if (!$sessionID && array_key_exists("guestSessionID", $_COOKIE)) {
 			$sessionID = $_COOKIE["guestSessionID"];
+		}
+		$queryResult = $db->query("select getSessionUser('$sessionID')");
+		if (!$queryResult || !$queryResult->fetch_row()[0]) {
+			$sessionID = null;
 		}
 		echo $sessionID;
 	?>`;
@@ -1405,7 +1510,7 @@
 			sessionID = data["sessionID"];
 			document.cookie = "sessionID=" + sessionID + ";samesite=strict";
 			document.cookie = "guestSessionID=" + sessionID + ";samesite=strict";
-			showPage(channelID, roomID);
+			showPage(roomID, channelID);
 		})
 		.catch((error) => console.log(error))
 	}

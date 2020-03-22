@@ -2,6 +2,8 @@
 # This script returns the list of new messages, along with edited and deleted and any changes to the channel settings,
 # posted to a channel since the previous update, taking the ID of the channel and the time of the previous update
 
+# ignore_user_abort(true);
+
 # initialize result array
 $ajaxResult = array();
 
@@ -24,9 +26,22 @@ if ($db) {
 	$userID = $queryResult->fetch_row()[0];
 	free_all_results($db);
 
+	# log user presence
+	$queryResult = $db->query("call logChannelVisit('$userID', '$channelID')");
+	free_all_results($db);
+
 	# poll for updates
 	$updatesDetected = false;
-	while (!$updatesDetected) {
+	$iterations = 0;
+	while (!$updatesDetected && $iterations < 30) {
+		echo '';
+		ob_flush();
+		flush();
+		if (connection_aborted() || connection_status() != CONNECTION_NORMAL) {
+			$db->close();
+			exit();
+		}
+
 		# record current time
 		$queryResult = $db->query("select NOW()");
 		if (!$queryResult) {
@@ -35,6 +50,8 @@ if ($db) {
 			break;
 		}
 		$ajaxResult["updateTime"] = $queryResult->fetch_array()[0];
+
+		
 
 		# check changes in permissions
 
@@ -61,6 +78,10 @@ if ($db) {
 
 		# check name changes
 		free_all_results($db);
+		if (connection_aborted()) {
+			$db->close();
+			exit();
+		}
 		$queryResult = $db->query("call getNameChanges('$channelID', '$lastUpdateTime')");
 		if ($queryResult) {
 			$nameChanges = $queryResult->fetch_all(MYSQLI_ASSOC);
@@ -69,7 +90,7 @@ if ($db) {
 			if ($count > 0) {
 				$ajaxResult["nameChanges"] = array();
 				for ($i = 0; $i < $count; ++$i) {
-					$ajaxResult["nameChanges"][$nameChanges[i]["userID"]] = $nameChanges[i]["screenName"];
+					$ajaxResult["nameChanges"][$nameChanges[$i]["userID"]] = $nameChanges[$i]["screenName"];
 				}
 			}
 		}
@@ -80,10 +101,17 @@ if ($db) {
 
 		# free results
 		if (!$updatesDetected) {
+			echo '';
+			ob_flush();
+			flush();
 			free_all_results($db);
-			if (connection_aborted()) exit();
-			sleep(0.6);
+			if (connection_aborted()) {
+				$db->close();
+				exit();
+			}
+			sleep(0.5);
 		}
+		++$iterations;
 	}
 }
 else {
