@@ -16,6 +16,7 @@ if ($db) {
 	# read parameters
 	$_POST = json_decode(file_get_contents('php://input'), true);
 	$sessionID = $db->real_escape_string($_POST["sessionID"]);
+	$messageID = $db->real_escape_string($_POST["messageID"]);
 
 	# get userID from session ID
 	$queryResult = $db->query("select getSessionUser('$sessionID')");
@@ -33,6 +34,30 @@ if ($db) {
 		$ajaxResult["failReason"] = "Failed to validate user";
 		exit(json_encode($ajaxResult));
 	}
+
+	# check if user has permission to delete message
+	$queryResult = $db->query("select canDeleteMessage('$userID', '$messageID')");
+	if (!$queryResult) {
+		# handle errors
+		$ajaxResult["querySuccess"] = false;
+		$ajaxResult["errorCode"] = $db->errno;
+		exit(json_encode($ajaxResult));
+	}
+	if (!$queryResult->fetch_row()[0]) {
+		$ajaxResult["querySuccess"] = false;
+		$ajaxResult["failReason"] = "Permission to delete message not granted";
+		exit(json_encode($ajaxResult));
+	}
+
+	# delete message
+	$queryResult = $db->query("call deleteMessage('$userID', '$messageID')");
+	if (!$queryResult) {
+		# handle errors
+		$ajaxResult["querySuccess"] = false;
+		$ajaxResult["errorCode"] = $db->errno;
+		exit(json_encode($ajaxResult));
+	}
+	$ajaxResult["querySuccess"] = true;
 }
 else {
 	$ajaxResult["sqlConnectSuccess"] = false;

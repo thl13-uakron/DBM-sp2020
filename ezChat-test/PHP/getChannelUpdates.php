@@ -32,8 +32,8 @@ if ($db) {
 
 	# poll for updates
 	$updatesDetected = false;
-	$iterations = 0;
-	while (!$updatesDetected && $iterations < 30) {
+	# $iterations = 0;
+	while (!$updatesDetected) {
 		echo '';
 		ob_flush();
 		flush();
@@ -50,8 +50,6 @@ if ($db) {
 			break;
 		}
 		$ajaxResult["updateTime"] = $queryResult->fetch_array()[0];
-
-		
 
 		# check changes in permissions
 
@@ -75,6 +73,28 @@ if ($db) {
 		}
 
 		# check deleted messages
+		free_all_results($db);
+		$queryResult = $db->query("call getMessageDeletions('$channelID', '$lastUpdateTime')");
+		if ($queryResult) {
+			$deletedMessages = $queryResult->fetch_all(MYSQLI_ASSOC);
+
+			# record data and break loop if updates are detected
+			$count = count($deletedMessages);
+			if ($count > 0) {
+				$ajaxResult["querySuccess"] = true;
+				$ajaxResult["deletedMessages"] = array();
+				for ($i = 0; $i < $count; ++$i) {
+					$ajaxResult["deletedMessages"][$deletedMessages[$i]["messageID"]] = ["deleteTime" => $deletedMessages[$i]["deleteTime"]];
+				}
+				$updatesDetected = true;
+			}
+		}
+		else {
+			# indicate if errors occur
+			$ajaxResult["querySuccess"] = false;
+			$ajaxResult["errorCode"] = $db->errno;
+			break;
+		}
 
 		# check name changes
 		free_all_results($db);
@@ -92,6 +112,7 @@ if ($db) {
 				for ($i = 0; $i < $count; ++$i) {
 					$ajaxResult["nameChanges"][$nameChanges[$i]["userID"]] = $nameChanges[$i]["screenName"];
 				}
+				$updatesDetected = true;
 			}
 		}
 		else {
@@ -109,9 +130,9 @@ if ($db) {
 				$db->close();
 				exit();
 			}
-			sleep(0.5);
+			sleep(0.7);
 		}
-		++$iterations;
+		# ++$iterations;
 	}
 }
 else {

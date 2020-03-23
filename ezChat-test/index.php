@@ -69,7 +69,7 @@
 		font-weight: normal;
 	}
 
-	.leftFlexAlign {
+	.rightFlexAlign {
 		align-self: flex-end;
 	}
 
@@ -212,6 +212,8 @@
 	var cachedMessages = {};
 	var lastVisitedChannelByRoom = {};
 	var messageDrafts = {};
+	var roomPermissions = {};
+	var channelPermissions = {};
 
 	var channelUpdateController = new AbortController();
 	var roomInfoController = new AbortController();
@@ -1020,6 +1022,7 @@
 			data = JSON.parse(data);
 
 			userID = data["userID"];
+			parent.dataset.userID = userID;
 
 			parent.innerHTML = `
 			<div id="accountInfoHeader" class="padded">
@@ -1049,6 +1052,135 @@
 		.catch(error => console.log(error));
 	}
 
+	function showMessageEditing(messageID) {
+		var parent = document.getElementById("message" + messageID + "body");
+		var messageContent = parent.innerHTML;
+
+		parent.innerHTML = `
+		<div class="rowFlex">
+			<textarea id="message` + messageID + `editInput"></textarea>
+		</div>
+		<div>
+			<button id="message` + messageID + `editCancel"> Cancel (ESC) </button>
+			<button id="message` + messageID + `editSave"> Save (ENTER) </button>
+		</div>
+		`;
+
+		var editInput = document.getElementById("message" + messageID + "editInput");
+		editInput.style.flexGrow = 1;
+		editInput.style.resize = "none";
+		editInput.rows = 5;
+		editInput.value = messageContent;
+		editInput.focus();
+		
+		var editSaveButton = document.getElementById("message" + messageID + "editSave");
+		editSaveButton.className = "smallText";
+
+		var editCancelButton = document.getElementById("message" + messageID + "editCancel");
+		editCancelButton.className = "smallText";
+
+		editCancelButton.addEventListener("click", function() {
+			parent.innerHTML = messageContent;
+		})
+
+		editSaveButton.addEventListener("click", function() {
+			fetch("PHP/editMessage.php", {
+				method: "POST",
+				body: JSON.stringify({
+					sessionID: sessionID,
+					messageID: messageID,
+					newContent: editInput.value
+				})
+			})
+			.then(response => response.text())
+			.then(data => {
+				console.log(data);
+				if (data["querySuccess"] == true) {
+					document.getElementById("chatboxInput").focus();
+				}
+			})
+			.catch(error => console.log(error));
+		})
+
+		editInput.addEventListener("keyup", function(e) {
+			if (editInput.value.length > 0) {
+				editSaveButton.disabled = false;
+			}
+			else {
+				editSaveButton.disabled = true;
+			}
+
+			if (e.keyCode == 13 && !e.shiftKey) {
+				editSaveButton.click();
+			}
+			else if (e.keyCode == 27) {
+				editCancelButton.click();
+			}
+		})
+	}
+
+	function showMessageDeletion(messageID) {
+		var parent = document.getElementById("message" + messageID + "options");
+		parent.innerHTML = `<span class="grayText"> Delete Message?&nbsp </span>`;
+
+		var deleteMessageGoButton = document.createElement("button");
+		deleteMessageGoButton.className = "smallText";
+		deleteMessageGoButton.innerHTML = "Yes";
+		deleteMessageGoButton.addEventListener("click", function() {
+			fetch("PHP/deleteMessage.php", {
+				method: "POST",
+				body: JSON.stringify({
+					sessionID: sessionID,
+					messageID: messageID
+				})
+			})
+			.then(response => response.text())
+			.then(data => {
+				console.log(data)
+			})
+			.catch(error => console.log(error));
+		});
+		parent.appendChild(deleteMessageGoButton);
+
+		var deleteMessageCancelButton = document.createElement("button");
+		deleteMessageCancelButton.className = "smallText";
+		deleteMessageCancelButton.innerHTML = "No";
+		deleteMessageCancelButton.addEventListener("click", function() {
+			showMessageOptions(messageID);
+		})
+		parent.appendChild(deleteMessageCancelButton);
+	}
+
+	function showMessageOptions(messageID) {
+		var parent = document.getElementById("message" + messageID + "options");
+		parent.innerHTML = "";
+
+		var senderID = document.getElementById("message" + messageID).dataset.userID;
+		var userID = document.getElementById("accountInfo").dataset.userID;
+
+		// show option to edit message if applicable
+		if (userID == senderID) {
+			var editButton = document.createElement("button");
+			editButton.innerHTML = "Edit";
+			editButton.className = "smallText";
+			editButton.addEventListener("click", function() {
+				showMessageEditing(messageID);
+			});
+			parent.appendChild(editButton);
+		}
+
+		// show option to delete message if applicable
+		if (userID == senderID || userID == document.getElementById("creatorIDElement").innerHTML) {
+			var deleteButton = document.createElement("button");
+			deleteButton.innerHTML = "Delete";
+			deleteButton.className = "smallText";
+			deleteButton.addEventListener("click", function() {
+				showMessageDeletion(messageID);
+			});
+			parent.appendChild(deleteButton);
+		}
+	}
+
 	function formatMessage(messageContent) {
 		messageContent = escapeHTML(messageContent);
 		// messageContent.replace(/\n/g, "<br />");
@@ -1063,30 +1195,43 @@
 		element.id = elementID;
 		element.className = "message columnFlex padded bottomMargin";
 		element.dataset.messageID = messageInfo["messageID"];
+		element.dataset.userID = messageInfo["userID"];
 
 		var messageHeader = document.createElement("div");
 		element.appendChild(messageHeader);
-		messageHeader.className = "bottomMargin rowFlex smallText";
+		messageHeader.className = "rowFlex smallText";
 		messageHeader.innerHTML = `
-		<div>
+		<div style="flex-grow: 1" class="bottomMargin">
 			<span id="`+ elementID + `screenName" class="boldText">` + escapeHTML(messageInfo["screenName"]) + `</span>  
 			(userID <span id="`+ elementID + `userID">` + messageInfo["userID"] + `</span>)
 			<span class="grayText" id="`+ elementID + `sendTime"> ` + convertDateTime(messageInfo["sendTime"]) + ` </span>
-			<span class="grayText" id="`+ elementID + `editTime"></span>
+			<span class="grayText" id="`+ elementID + `editTime"> ` + (messageInfo["editTime"] ? "<i>(edited " + convertDateTime(messageInfo["editTime"]) + ")</i>" : "") +  ` </span>
 		</div>
+		<div id="` + elementID + `options" class="rowFlex" style="justify-content: flex-end"> </div>
 		`;
 
 		var messageBody = document.createElement("div");
 		element.appendChild(messageBody);
 		messageBody.className = "bottomMargin";
+		messageBody.id = elementID + "body";
 		messageBody.innerHTML = formatMessage(messageInfo["content"]);
 
-		/*
 		var messageFooter = document.createElement("div");
 		element.appendChild(messageFooter);
-		messageFooter.className = "grayText smallText bottomMargin";
-		messageFooter.innerHTML = `messageID ` + messageInfo["messageID"];
-		*/
+		messageFooter.className = "smallText";
+		// messageFooter.hidden = true;
+		// messageFooter.innerHTML = `messageID ` + messageInfo["messageID"];
+
+		element.addEventListener("mouseenter", function() {
+			if (!element.dataset.hover || element.dataset.hover == "false") {
+				showMessageOptions(messageInfo["messageID"]);
+				element.dataset.hover = true;
+			}
+		})
+		element.addEventListener("mouseleave", function() {
+			element.dataset.hover = false;
+			document.getElementById(elementID + "options").innerHTML = "";
+		})
 
 		return element;
 	}
@@ -1101,13 +1246,16 @@
 			// exit if no longer viewing current channel
 			if (!parent || parent.dataset.channelID != channelID) return;
 
+			// add message to stream
 			messageElement = document.getElementById("message" + messageList[i]["messageID"]);
 			if (!messageElement) {
 				parent.appendChild(getMessageElement(messageList[i]));
-				cachedMessages[channelID]["messageList"].push(messageList[i]);
+				if (messageList[i]["messageID"] > cachedMessages[channelID]["messageList"][cachedMessages[channelID]["messageList"].length - 1]["messageID"]) {
+					cachedMessages[channelID]["messageList"].push(messageList[i]);
+				}
 			}
 			else {
-				messageElement = getMessageElement(messageList[i]);
+				messageElement.innerHTML = getMessageElement(messageList[i]).innerHTML;
 				for (j in cachedMessages[channelID]["messageList"]) {
 					if (cachedMessages[channelID]["messageList"][j]["messageID"] == messageList[i]["messageID"]) {
 						cachedMessages[channelID]["messageList"][j] = messageList[i];
@@ -1166,6 +1314,20 @@
 				updateTime = data["updateTime"];
 			}
 
+			// handle deleted messages
+			deletedMessages = data["deletedMessages"];
+			if (deletedMessages) {
+				for (i in cachedMessages[channelID]["messageList"]) {
+					var messageListing = cachedMessages[channelID]["messageList"][i];
+					if (deletedMessages[messageListing["messageID"]] 
+						&& Date.parse(deletedMessages[messageListing["messageID"]]["deleteTime"]) > Date.parse(messageListing["sendTime"])) {
+						cachedMessages[channelID]["messageList"].splice(i, 1);
+						document.getElementById("message" + messageListing["messageID"]).remove();
+					}
+				}
+				updateTime = data["updateTime"];
+			}
+
 			// keep message stream scrolled to bottom if currently scrolled to bottom
 			parent = document.getElementById("messageStream");
 			if (!parent || parent.dataset.channelID != channelID) return;
@@ -1195,7 +1357,7 @@
 				<textarea style="flex-grow: 1" id="chatboxInput" class="bottomMargin"></textarea>
 				<div id="chatboxFooter" style="flex-grow:0" class="rowFlex"> 
 					<span id="chatboxInfo" class="smallText" style="flex-grow:1"> ENTER to send, SHIFT+ENTER to create line break </span>
-					<button id="sendButton" class="leftFlexAlign" style="flex-grow:0"> Send Message </button>
+					<button id="sendButton" class="rightFlexAlign" style="flex-grow:0"> Send Message </button>
 				</div>
 			</div>
 		</div>
@@ -1356,8 +1518,11 @@
 		}
 	}
 
-	function enterChannel(roomID, channelID) {
+	function enterChannel(p_roomID, p_channelID) {
 		abortChannelFetches();
+
+		roomID = p_roomID;
+		channelID = p_channelID;
 
 		if (channelID) {
 			// record channelID and display channel information and chat stream
