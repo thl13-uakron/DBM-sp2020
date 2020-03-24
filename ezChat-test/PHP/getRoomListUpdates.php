@@ -27,6 +27,7 @@ if ($db) {
 			break;
 		}
 		$ajaxResult["updateTime"] = $queryResult->fetch_array()[0];
+		free_all_results($db);
 
 		# check new and updated rooms
 		$queryResult = $db->query("call getRoomListUpdates('$lastUpdateTime')");

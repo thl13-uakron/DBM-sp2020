@@ -41,6 +41,12 @@
 
 	textarea {
 		font-family: arial;
+		flex-grow: 0.8;
+		resize: none;
+	}
+
+	input {
+		flex-grow: 0.5;
 	}
 
 	.message:hover {
@@ -130,7 +136,7 @@
 		font-size: 14px;
 	}
 
-	#roomCreationPanel, #messageStream {
+	.centerRegionElement {
 		position:fixed;
 		overflow-y: auto;
 		width: 60%;
@@ -217,6 +223,7 @@
 
 	var channelUpdateController = new AbortController();
 	var roomInfoController = new AbortController();
+	var roomInfoUpdateController = new AbortController();
 	var roomListUpdateController = new AbortController();
 
 	function abortChannelFetches() {
@@ -248,7 +255,7 @@
 	}
 
 	// functions for retrieving data from backend and dynamically generating page content
-	function getListedChannelElement(channelInfo, roomID, currentChannelID) {
+	function getListedChannelElement(channelInfo, roomID) {
 		var element = document.createElement("div");
 		var elementID = "channel" + channelInfo["channelID"];
 		element.id = elementID;
@@ -260,7 +267,7 @@
 		<span class="normalText">(channelID: <span id="`+elementID+`channelID">` + channelInfo["channelID"] + `</span>)</span>
 		`;
 
-		if (channelInfo["channelID"] == currentChannelID) {
+		if (channelInfo["channelID"] == channelID) {
 			element.className += " selectedListing";
 		}
 		else {
@@ -294,14 +301,338 @@
 					channelListBody.appendChild(getListedChannelElement(channelList[i], roomInfo, channelID));
 				}
 				else {
-					channelElement = getListedChannelElement(channelList[i], roomInfo, channelID);
+					channelElement.innerHTML = getListedChannelElement(channelList[i], roomInfo, channelID).innerHTML;
 				}
 			}
 		}
 	}
 
-	function getRoomInfoUpdates(roomID, channelID, lastUpdateTime) {
-		//
+	function getRoomInfoUpdates(roomID, lastUpdateTime) {
+		parent = document.getElementById("roomInfo");
+		if (parent.dataset.roomID == roomID) {
+			fetch("PHP/getRoomInfoUpdates.php", {
+				method: "POST",
+				body: JSON.stringify({
+					sessionID: sessionID,
+					roomID: roomID,
+					lastUpdateTime: lastUpdateTime
+				}),
+				signal: roomInfoUpdateController.signal
+			})
+			.then(response => response.text())
+			.then(data => {
+				console.log(data);
+				data = JSON.parse(data);
+
+				updateTime = lastUpdateTime;
+				roomInfo = data["roomInfo"];
+				newChannels = data["newChannels"];
+
+				if (roomInfo) {
+					updateTime = data["updateTime"];
+					if (parent.dataset.roomID == roomID) {
+						var roomNameElement = document.getElementById("roomNameElement");
+						roomNameElement.innerHTML = roomInfo["roomName"];
+
+						var roomDescriptionElement = document.getElementById("roomDescriptionElement");
+						roomDescriptionElement.innerHTML = roomInfo["description"];
+
+						if (roomInfo["description"]) {
+							roomDescriptionElement.className = "padded bottomMargin";
+						}
+						else {
+							roomDescriptionElement.className = "";
+						}
+					}
+					else {
+						return;
+					}
+				}
+
+				if (newChannels) {
+					updateTime = data["updateTime"];
+					cachedChannelList = cachedRoomInfo[roomID]["channelList"];
+					for (i in newChannels) {
+						if (newChannels[i]["channelID"] > cachedChannelList[cachedChannelList.length - 1]["channelID"]) {
+							cachedRoomInfo[roomID]["channelList"].push(newChannels[i]);
+						}
+						else {
+							for (j in cachedChannelList) {
+								if (newChannels[i]["channelID"] == cachedChannelList[j]["channelID"]) {
+									cachedRoomInfo[roomID]["channelList"][j] = newChannels[i];
+									break;
+								}
+							}
+						}
+					}
+					showChannels(newChannels, roomID);
+				}
+				
+				setTimeout(() => getRoomInfoUpdates(roomID, updateTime), 1200);
+			})
+			.catch(error => {
+				console.log(error);
+				if (error.name != "AbortError") {
+					// resend request if it timed out but not if it was aborted
+					setTimeout(() => getRoomInfoUpdates(roomID, lastUpdateTime), 1200);
+				}
+			})
+		}
+	}
+
+	function showChannelEditing(channelID) {
+		var parent = document.getElementById("centerRegion");
+		channelUpdateController.abort();
+		channelUpdateController = new AbortController;
+		parent.innerHTML = `
+		<div id="channelEditPanel" class="padded centerRegionElement" style="overflow-y: auto">
+			<div class="padded boldText">
+				Edit Channel Details
+			</div>
+			<div class="padded">
+				Channel Name (1-24 characters): <span class="rowFlex"> <input id="channelNameInput" maxlength=24> </input> </span>
+			</div>
+			<div class="padded">
+				Channel Description (max 64 characters, optional): 
+				<br />
+				<div class="rowFlex">
+				<textarea id="channelDescriptionInput" maxlength=64></textarea>
+				</div>
+			</div>
+			<div class="padded">
+				<button id="channelEditBackButton"> Go Back </button>
+				<button id="channelEditGoButton"> Create Channel </button>
+			</div>
+			<div class="padded" id="channelEditStatus">
+			</div>
+		</div>
+		`;
+
+		var channelEditController = new AbortController();
+
+		var channelEditBackButton = document.getElementById("channelEditBackButton");
+		channelEditBackButton.addEventListener("click", function() {
+			channelEditController.abort();
+			enterChannel(roomID, channelID);
+		})
+		var channelEditGoButton = document.getElementById("channelEditGoButton");
+		channelEditGoButton.disabled = true;
+	}
+
+	function showChannelCreation() {
+		var parent = document.getElementById("centerRegion");
+		channelUpdateController.abort();
+		channelUpdateController = new AbortController;
+		parent.innerHTML = `
+		<div id="channelCreationPanel" class="padded centerRegionElement" style="overflow-y: auto">
+			<div class="padded boldText">
+				Create a New Channel
+			</div>
+			<div class="padded">
+				Channel Name (1-24 characters): <span class="rowFlex"> <input id="channelNameInput" maxlength=24> </input> </span>
+			</div>
+			<div class="padded">
+				Channel Description (max 64 characters, optional): 
+				<br />
+				<div class="rowFlex">
+					<textarea id="channelDescriptionInput" maxlength=64></textarea>
+				</div>
+			</div>
+			<div class="padded">
+				<button id="channelCreationBackButton"> Go Back </button>
+				<button id="channelCreationGoButton"> Create Channel </button>
+			</div>
+			<div class="padded" id="channelCreationStatus">
+			</div>
+		</div>
+		`;
+
+		var channelCreationController = new AbortController();
+
+		var channelCreationBackButton = document.getElementById("channelCreationBackButton");
+		channelCreationBackButton.addEventListener("click", function() {
+			channelCreationController.abort();
+			enterChannel(roomID, channelID);
+		})
+		var channelCreationGoButton = document.getElementById("channelCreationGoButton");
+		channelCreationGoButton.disabled = true;
+
+		var channelNameInput = document.getElementById("channelNameInput");
+		var channelDescriptionInput = document.getElementById("channelDescriptionInput");
+
+		var channelCreationStatus = document.getElementById("channelCreationStatus");
+
+		parent.addEventListener("keyup", function() {
+			channelCreationStatus.innerHTML = "";
+			if (channelNameInput.value.length > 0) {
+				channelCreationGoButton.disabled = false;
+			}
+			else {
+				channelCreationGoButton.disabled = true;
+			}
+		});
+
+		channelCreationGoButton.addEventListener("click", function() {
+			fetch("PHP/addChannel.php", {
+				method: "POST",
+				body: JSON.stringify({
+					sessionID: sessionID,
+					roomID: roomID,
+					channelName: channelNameInput.value,
+					description: channelDescriptionInput.value
+				}),
+				signal: channelCreationController.signal
+			})
+			.then(response => response.text())
+			.then(data => {
+				console.log(data);
+				data = JSON.parse(data);
+
+				if (data["querySuccess"]) {
+					channelID = data["channelID"];
+					enterChannel(roomID, channelID);
+				}
+				else {
+					channelCreationStatus.innerHTML = "Failed to create channel";
+					if (data["failReason"]) {
+						channelCreationStatus.innerHTML += ": " + data["failReason"];
+					}
+				}
+			})
+			.then(error => console.log(error))
+		})
+	}
+
+	function showRoomEditing(roomID) {
+		var parent = document.getElementById("centerRegion");
+		channelUpdateController.abort();
+		channelUpdateController = new AbortController;
+		parent.innerHTML = `
+		<div id="roomEditPanel" class="padded centerRegionElement" style="overflow-y: auto">
+			<div class="padded boldText">
+				Edit Room Details
+			</div>
+			<div class="padded">
+				Room Name (1-32 characters): <span class="rowFlex"> <input id="roomNameInput" maxlength=32> </input> </span>
+			</div>
+			<div class="padded">
+				Room Description (max 128 characters, optional): 
+				<br />
+				<div class="rowFlex">
+					<textarea id="roomDescriptionInput" maxlength=128></textarea>
+				</div>
+			</div>` 
+			/*<div class="padded">
+				<input type="radio" name="roomAccess" id="roomIsBrowsable"> Room appears in public list </input>
+				<br />
+				<input type="radio" name="roomAccess" id="roomIsNotBrowsable"> Room is only accessible by URL </input>
+			</div>*/ + `
+			<div class="padded">
+				<button id="roomEditBackButton"> Go Back </button>
+				<button id="roomEditGoButton"> Save Changes </button>
+			</div>
+			<div class="padded" id="roomEditStatus"> 
+			</div>
+		</div>
+		`;
+
+		var roomEditController = new AbortController();
+
+		var roomEditBackButton = document.getElementById("roomEditBackButton");
+		roomEditBackButton.addEventListener("click", function() {
+			roomEditController.abort();
+			enterChannel(roomID, channelID);
+		})
+		var roomEditGoButton = document.getElementById("roomEditGoButton");
+		roomEditGoButton.disabled = true;
+
+		var roomNameInput = document.getElementById("roomNameInput");
+		roomNameInput.value = cachedRoomInfo[roomID]["roomInfo"]["roomName"];
+
+		var roomDescriptionInput = document.getElementById("roomDescriptionInput");
+		roomDescriptionInput.value = cachedRoomInfo[roomID]["roomInfo"]["description"];
+
+		var roomEditStatus = document.getElementById("roomEditStatus");
+
+		parent.addEventListener("keyup", function() {
+			roomEditStatus.innerHTML = "";
+			if (roomNameInput.value.length > 0) {
+				roomEditGoButton.disabled = false;
+			}
+			else {
+				roomEditGoButton.disabled = true;
+			}
+		});
+
+		roomEditGoButton.addEventListener("click", function() {
+			//
+		})
+	}
+
+	function showRoomInfo_helper(roomID, roomInfo, roomPermissions, channelList, updateTime) {
+		parent = document.getElementById("roomInfo");
+
+		if (parent.dataset.roomID == roomID) {
+			parent.innerHTML = `
+			<div id="roomInfoHeader" class="padded">
+				<span class="lightGrayText"><b> Current Room: <span id="roomNameElement"></span></b> </span> 
+				(roomID: <span id="roomIDElement"> </span>)
+				<br />
+				<i><span class="smallText grayText"> Created by <span id="creatorNameElement"></span> (userID: <span id="creatorIDElement"></span>) 
+				on <span id="creationDateElement"></span> </span></i>
+			</div>
+			<div id="roomDescriptionElement"> </div>
+			<div id="roomOptionsElement"> </div>
+			<div id="channelListElement"> 
+				<div id="channelListHeader" class="padded silverText"> 
+					<b> Channels in this Room </b> 
+				</div>
+				<div id="channelListBody" class="bottomMargin"> </div>
+				<div id="createChannelOption"> </div>
+			</div>
+			`;
+
+			document.getElementById("roomNameElement").innerHTML = escapeHTML(roomInfo["roomName"]);
+			document.getElementById("roomIDElement").innerHTML = roomID;
+			document.getElementById("creatorNameElement").innerHTML = escapeHTML(roomInfo["creatorName"]);
+			document.getElementById("creatorIDElement").innerHTML = roomInfo["creatorID"];
+			document.getElementById("creationDateElement").innerHTML = convertDateTime(roomInfo["creationDate"]);
+
+			if (roomInfo["description"]) {
+				var roomDescriptionElement = document.getElementById("roomDescriptionElement");
+				roomDescriptionElement.className = "padded bottomMargin";
+				roomDescriptionElement.innerHTML = escapeHTML(roomInfo["description"]);
+			}
+
+			var roomOptionsElement = document.getElementById("roomOptionsElement");
+
+			if (roomPermissions["canEditRoomInfo"]) {
+				var editRoomButton = document.createElement("button");
+				editRoomButton.innerHTML = "Edit Room Info";
+				editRoomButton.className = "smallText bottomMargin";
+				editRoomButton.addEventListener("click", function() {
+					showRoomEditing(roomID);
+				})
+				// roomOptionsElement.appendChild(editRoomButton);
+				// roomOptionsElement.className = "padded bottomMargin";
+			}
+
+			if (roomPermissions["canAddChannels"]) {
+				var addChannelButton = document.createElement("button");
+				addChannelButton.innerHTML = "Add Channel";
+				addChannelButton.className = "smallText";
+				addChannelButton.addEventListener("click", function() {
+					showChannelCreation();
+				})
+				document.getElementById("createChannelOption").appendChild(addChannelButton);
+				document.getElementById("createChannelOption").className = "padded bottomMargin";
+			}
+
+			showChannels(channelList, roomID);
+
+			// poll for future updates
+			getRoomInfoUpdates(roomID, updateTime);
+		}
 	}
 
 	function showRoomInfo(roomID, channelID) {
@@ -344,6 +675,9 @@
 					if (parent.dataset.roomID != roomID) {
 						parent.dataset.roomID = roomID;
 						if (!cachedRoomInfo[roomID]) {
+							roomInfoUpdateController.abort();
+							roomInfoUpdateController = new AbortController();
+
 							fetch("PHP/getRoomInfo.php", {
 								method: "POST",
 								body: JSON.stringify({
@@ -361,53 +695,17 @@
 
 								roomInfo = data["roomInfo"];
 								updateTime = data["updateTime"];
-								cachedRoomInfo[roomID] = {"roomInfo": roomInfo, "updateTime": updateTime};
-								parent.innerHTML = `
-								<div id="roomInfoHeader" class="padded">
-									<span class="lightGrayText"><b> Current Room: <span id="roomNameElement"></span></b> </span> 
-									(roomID: <span id="roomIDElement"> </span>)
-									<br />
-									<i><span class="smallText grayText"> Created by <span id="creatorNameElement"></span> (userID: <span id="creatorIDElement"></span>) 
-									on <span id="creationDateElement"></span> </span></i>
-								</div>
-								<div id="roomDescriptionElement"> </div>
-								<div id="channelListElement"> 
-									<div id="channelListHeader" class="padded silverText"> <b> Channels in this Room </b> </div>
-									<div id="channelListBody" class="bottomMargin"> </div>
-								</div>
-								`;
+								roomPermissions = data["roomPermissions"];
+								channelList = data["channelList"];
 
-								document.getElementById("roomNameElement").innerHTML = escapeHTML(roomInfo["roomName"]);
-								document.getElementById("roomIDElement").innerHTML = roomID;
-								document.getElementById("creatorNameElement").innerHTML = escapeHTML(roomInfo["creatorName"]);
-								document.getElementById("creatorIDElement").innerHTML = roomInfo["creatorID"];
-								document.getElementById("creationDateElement").innerHTML = convertDateTime(roomInfo["creationDate"]);
+								cachedRoomInfo[roomID] = {
+									"roomInfo": roomInfo, 
+									"updateTime": updateTime, 
+									"roomPermissions": roomPermissions,
+									"channelList": channelList
+								};
 
-								if (roomInfo["description"]) {
-									var roomDescriptionElement = document.getElementById("roomDescriptionElement");
-									roomDescriptionElement.className = "padded bottomMargin";
-									roomDescriptionElement.innerHTML = escapeHTML(roomInfo["description"])
-								}
-
-								fetch("PHP/getChannelsByRoom.php", {
-									method: "POST",
-									body: JSON.stringify({
-										roomID: roomID 
-									})
-								})
-								.then(response => response.text())
-								.then(data => {
-									console.log(data);
-									data = JSON.parse(data);
-
-									channelList = data["channelList"];
-									cachedRoomInfo[roomID]["channelList"] = channelList;
-									showChannels(channelList, roomID);
-
-									// poll for future updates
-									getRoomInfoUpdates(roomID, channelID, updateTime);
-								})
-								.catch(error => console.log(error));
+								showRoomInfo_helper(roomID, roomInfo, roomPermissions, channelList, updateTime);
 
 							})
 							.catch(error => console.log(error));
@@ -417,38 +715,9 @@
 							roomInfo = cachedRoomInfo[roomID]["roomInfo"];
 							channelList = cachedRoomInfo[roomID]["channelList"];
 							updateTime = cachedRoomInfo[roomID]["updateTime"];
+							roomPermissions = cachedRoomInfo[roomID]["roomPermissions"];
 
-							parent.innerHTML = `
-							<div id="roomInfoHeader" class="padded">
-								<span class="lightGrayText"><b> Current Room: <span id="roomNameElement"></span></b> </span> 
-								(roomID: <span id="roomIDElement"> </span>)
-								<br />
-								<i><span class="smallText grayText"> Created by <span id="creatorNameElement"></span> (userID: <span id="creatorIDElement"></span>) 
-								on <span id="creationDateElement"></span> </span></i>
-							</div>
-							<div id="roomDescriptionElement"> </div>
-							<div id="channelListElement"> 
-								<div id="channelListHeader" class="padded silverText"> <b> Channels in this Room </b> </div>
-								<div id="channelListBody" class="bottomMargin"> </div>
-							</div>
-							`;
-
-							document.getElementById("roomNameElement").innerHTML = escapeHTML(roomInfo["roomName"]);
-							document.getElementById("roomIDElement").innerHTML = roomID;
-							document.getElementById("creatorNameElement").innerHTML = escapeHTML(roomInfo["creatorName"]);
-							document.getElementById("creatorIDElement").innerHTML = roomInfo["creatorID"];
-							document.getElementById("creationDateElement").innerHTML = convertDateTime(roomInfo["creationDate"]);
-
-							if (roomInfo["description"]) {
-								var roomDescriptionElement = document.getElementById("roomDescriptionElement");
-								roomDescriptionElement.className = "padded bottomMargin";
-								roomDescriptionElement.innerHTML = escapeHTML(roomInfo["description"])
-							}
-
-							showChannels(channelList, roomID);
-
-							// poll for future updates
-							getRoomInfoUpdates(roomID, channelID, updateTime);
+							showRoomInfo_helper(roomID, roomInfo, roomPermissions, channelList, updateTime);
 						}
 					}
 					else {
@@ -479,17 +748,19 @@
 		channelUpdateController.abort();
 		channelUpdateController = new AbortController;
 		parent.innerHTML = `
-		<div id="roomCreationPanel" class="padded" style="overflow-y: auto">
+		<div id="roomCreationPanel" class="padded centerRegionElement" style="overflow-y: auto">
 			<div class="padded boldText">
 				Create a New Room
 			</div>
 			<div class="padded">
-				Room Name (1-32 characters): <input id="newRoomName" maxlength=32> </input>
+				Room Name (1-32 characters): <span class="rowFlex"> <input id="newRoomName" maxlength=32> </input> </span>
 			</div>
 			<div class="padded">
 				Room Description (max 128 characters, optional): 
 				<br />
-				<textarea id="newRoomDescription" maxlength=128></textarea>
+				<div class="rowFlex">
+					<textarea id="newRoomDescription" maxlength=128></textarea>
+				</div>
 			</div>
 			<div class="padded">
 				<input type="radio" name="newRoomAccess" id="roomIsBrowsable" checked> Room appears in public list </input>
@@ -1250,7 +1521,8 @@
 			messageElement = document.getElementById("message" + messageList[i]["messageID"]);
 			if (!messageElement) {
 				parent.appendChild(getMessageElement(messageList[i]));
-				if (messageList[i]["messageID"] > cachedMessages[channelID]["messageList"][cachedMessages[channelID]["messageList"].length - 1]["messageID"]) {
+				cachedMessageList = cachedMessages[channelID]["messageList"];
+				if (cachedMessageList.length == 0 || messageList[i]["messageID"] > cachedMessageList[cachedMessageList.length - 1]["messageID"]) {
 					cachedMessages[channelID]["messageList"].push(messageList[i]);
 				}
 			}
@@ -1351,9 +1623,9 @@
 		parent.innerHTML = 
 		`
 		<div id="chatRegion" class="region">
-			<div id="messageStream" class="padded">
+			<div id="messageStream" class="padded centerRegionElement">
 			</div>
-			<div id="chatBox" class="padded columnFlex">
+			<div id="chatBox" class="padded columnFlex centerRegionElement">
 				<textarea style="flex-grow: 1" id="chatboxInput" class="bottomMargin"></textarea>
 				<div id="chatboxFooter" style="flex-grow:0" class="rowFlex"> 
 					<span id="chatboxInfo" class="smallText" style="flex-grow:1"> ENTER to send, SHIFT+ENTER to create line break </span>

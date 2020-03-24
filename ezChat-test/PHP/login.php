@@ -28,7 +28,7 @@ if ($db) {
 		$ajaxResult["userID"] = $userID;
 
 		free_all_results($db);
-		if ($db->query("call setSession('$userID', @p_sessionID)")) {
+		if ($userID && $db->query("call setSession('$userID', @p_sessionID)")) {
 			$queryResult = $db->query("select @p_sessionID");
 
 			$sessionID = $queryResult->fetch_row()[0];

@@ -33,6 +33,7 @@ if ($db) {
 	# poll for updates
 	$updatesDetected = false;
 	# $iterations = 0;
+	# set_time_limit(30);
 	while (!$updatesDetected) {
 		echo '';
 		ob_flush();
