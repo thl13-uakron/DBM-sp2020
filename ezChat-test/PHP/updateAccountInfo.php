@@ -26,6 +26,7 @@ if ($db) {
 		# handle errors
 		$ajaxResult["querySuccess"] = false;
 		$ajaxResult["errorCode"] = $db->errno;
+		$ajaxResult["failReason"] = $db->error;
 		exit(json_encode($ajaxResult));
 	}
 	$userID = $queryResult->fetch_row()[0];
@@ -41,6 +42,7 @@ if ($db) {
 	if (!$queryResult) {
 		$ajaxResult["querySuccess"] = false;
 		$ajaxResult["errorCode"] = $db->errno;
+		$ajaxResult["failReason"] = $db->error;
 		exit(json_encode($ajaxResult));
 	}
 	if (!$queryResult->fetch_row()[0]) {
@@ -55,6 +57,7 @@ if ($db) {
 		if (!$queryResult) {
 			$ajaxResult["querySuccess"] = false;
 			$ajaxResult["errorCode"] = $db->errno;
+			$ajaxResult["failReason"] = $db->error;
 			exit(json_encode($ajaxResult));
 		}
 		$newScreenName = $queryResult->fetch_row()[0];
@@ -65,6 +68,7 @@ if ($db) {
 	if (!$queryResult) {
 		$ajaxResult["querySuccess"] = false;
 		$ajaxResult["errorCode"] = $db->errno;
+		$ajaxResult["failReason"] = $db->error;
 		exit(json_encode($ajaxResult));
 	}
 	$accountInfo = $queryResult->fetch_assoc();
@@ -95,6 +99,7 @@ if ($db) {
 	if (!$queryResult) {
 		$ajaxResult["querySuccess"] = false;
 		$ajaxResult["errorCode"] = $db->errno;
+		$ajaxResult["failReason"] = $db->error;
 	}
 
 	$ajaxResult["querySuccess"] = true;
@@ -102,6 +107,7 @@ if ($db) {
 else {
 	$ajaxResult["sqlConnectSuccess"] = false;
 	$ajaxResult["errorCode"] = $db->errno;
+	$ajaxResult["failReason"] = $db->error;
 }
 
 # return data

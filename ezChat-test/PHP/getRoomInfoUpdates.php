@@ -38,7 +38,7 @@ if ($db) {
 
 	$updatesDetected = false;
 
-	# set_time_limit(30);
+	set_time_limit(40);
 	while (!$updatesDetected) {
 		# record current time
 		$queryResult = $db->query("select NOW()");

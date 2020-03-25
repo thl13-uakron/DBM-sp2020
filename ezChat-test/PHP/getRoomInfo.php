@@ -46,6 +46,7 @@ if ($db) {
 		$ajaxResult["querySuccess"] = true;
 		$ajaxResult["roomInfo"] = $roomInfo;
 
+		# get channel list
 		free_all_results($db);
 		$queryResult = $db->query("call getChannelsByRoom('$roomID')");
 		if (!$queryResult) {
@@ -56,9 +57,25 @@ if ($db) {
 		$channelList = $queryResult->fetch_all(MYSQLI_ASSOC);
 		$ajaxResult["channelList"] = $channelList;
 
+		# get permissions
 		$ajaxResult["roomPermissions"] = array();
-		$ajaxResult["roomPermissions"]["canAddChannels"] = ($userID == $roomInfo["creatorID"]);
-		$ajaxResult["roomPermissions"]["canEditRoomInfo"] = ($userID == $roomInfo["creatorID"]);
+		free_all_results($db);
+		$queryResult = $db->query("select canAddChannel('$userID', '$roomID')");
+		if (!$queryResult) {
+			$ajaxResult["querySuccess"] = false;
+			$ajaxResult["errorCode"] = $db->errno;
+			exit(json_encode($ajaxResult));
+		}
+		$ajaxResult["roomPermissions"]["canAddChannels"] = $queryResult->fetch_row()[0];
+
+		free_all_results($db);
+		$queryResult = $db->query("select canEditRoomInfo('$userID', '$roomID')");
+		if (!$queryResult) {
+			$ajaxResult["querySuccess"] = false;
+			$ajaxResult["errorCode"] = $db->errno;
+			exit(json_encode($ajaxResult));
+		}
+		$ajaxResult["roomPermissions"]["canEditRoomInfo"] = $queryResult->fetch_row()[0];
 	}
 	else {
 		# indicate if errors occur

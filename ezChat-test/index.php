@@ -565,7 +565,34 @@
 		});
 
 		roomEditGoButton.addEventListener("click", function() {
-			//
+			roomEditStatus.innerHTML = "Saving Changes...";
+			fetch("PHP/updateRoomInfo.php", {
+				method: "POST",
+				body: JSON.stringify({
+					sessionID: sessionID,
+					roomID: roomID,
+					newRoomName: roomNameInput.value,
+					newRoomDescription: roomDescriptionInput.value
+				}),
+				signal: roomEditController.signal
+			})
+			.then(response => response.text())
+			.then(data => {
+				console.log(data);
+				data = JSON.parse(data);
+
+				if (data["querySuccess"]) {
+					roomEditStatus.innerHTML = "Changes Saved.";
+					roomEditGoButton.disabled = true;
+				}
+				else {
+					roomEditStatus.innerHTML = "Failed to make changes";
+					if (data["failReason"]) {
+						roomEditStatus.innerHTML = ": " + data["failReason"];
+					}
+				}
+			})
+			.catch(error => console.log(error));
 		})
 	}
 
@@ -606,18 +633,18 @@
 
 			var roomOptionsElement = document.getElementById("roomOptionsElement");
 
-			if (roomPermissions["canEditRoomInfo"]) {
+			if (Number(roomPermissions["canEditRoomInfo"])) {
 				var editRoomButton = document.createElement("button");
 				editRoomButton.innerHTML = "Edit Room Info";
 				editRoomButton.className = "smallText bottomMargin";
 				editRoomButton.addEventListener("click", function() {
 					showRoomEditing(roomID);
 				})
-				// roomOptionsElement.appendChild(editRoomButton);
-				// roomOptionsElement.className = "padded bottomMargin";
+				roomOptionsElement.appendChild(editRoomButton);
+				roomOptionsElement.className = "padded bottomMargin";
 			}
 
-			if (roomPermissions["canAddChannels"]) {
+			if (Number(roomPermissions["canAddChannels"])) {
 				var addChannelButton = document.createElement("button");
 				addChannelButton.innerHTML = "Add Channel";
 				addChannelButton.className = "smallText";
@@ -904,8 +931,12 @@
 			allRoomsBody.innerHTML = '';
 
 			for (i in rooms) {
-				if (!document.getElementById("room" + rooms[i]["roomID"])) {
+				var roomListing = document.getElementById("room" + rooms[i]["roomID"])
+				if (!roomListing) {
 					allRoomsBody.appendChild(getListedRoomElement(rooms[i]));
+				}
+				else {
+					roomListing.innerHTML = getListedRoomElement(rooms[i]).innerHTML;
 				}
 			}
 				
@@ -936,7 +967,7 @@
 				for (i in updatedRooms) {
 					var roomListing = document.getElementById("room" + updatedRooms[i]["roomID"]);
 					if (roomListing) {
-						roomListing = getListedRoomElement(updatedRooms[i]);
+						roomListing.innerHTML = getListedRoomElement(updatedRooms[i]).innerHTML;
 					}
 					else {
 						document.getElementById("allRoomsBody").appendChild(getListedRoomElement(updatedRooms[i]));
