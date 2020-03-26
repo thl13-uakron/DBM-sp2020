@@ -1544,8 +1544,7 @@
 		}
 
 		parent = document.getElementById("messageStream");
-		for (i in messageList) {
-			// exit if no longer viewing current channel
+		for (i in messageList) {			// exit if no longer viewing current channel
 			if (!parent || parent.dataset.channelID != channelID) return;
 
 			// add message to stream
@@ -1553,7 +1552,7 @@
 			if (!messageElement) {
 				parent.appendChild(getMessageElement(messageList[i]));
 				cachedMessageList = cachedMessages[channelID]["messageList"];
-				if (cachedMessageList.length == 0 || messageList[i]["messageID"] > cachedMessageList[cachedMessageList.length - 1]["messageID"]) {
+				if (cachedMessageList.length == 0 || Number(messageList[i]["messageID"]) > Number(cachedMessageList[cachedMessageList.length - 1]["messageID"])) {
 					cachedMessages[channelID]["messageList"].push(messageList[i]);
 				}
 			}
