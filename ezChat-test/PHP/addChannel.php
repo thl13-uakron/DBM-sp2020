@@ -51,7 +51,7 @@ if ($db) {
 	}
 
 	# execute query
-	$queryResult = $db->query("call addChannel('$channelName', '$description', '$roomID', @p_channelID)");
+	$queryResult = $db->query("call addChannel('$channelName', '$description', '$roomID', '$userID', @p_channelID)");
 	if ($queryResult) {
 		$queryResult = $db->query("select @p_channelID");
 

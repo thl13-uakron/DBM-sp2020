@@ -1,8 +1,7 @@
-<?php
-# This script allows a user to change the name and description of a room, taking the roomID,
-# the user's sessionID, and the updated information as parameters
-
-# initialize result array
+<?php 
+# This script allows the user to change the name of a description of a channel, taking their
+# sessionID, the channelID, and the new name and description, and checking whether the user has
+# permission to make the change
 $ajaxResult = array();
 
 # get connection to mysql database
@@ -14,44 +13,39 @@ if ($db) {
 
 	# read parameters
 	$_POST = json_decode(file_get_contents('php://input'), true);
-	$roomID = $db->real_escape_string($_POST["roomID"]);
 	$sessionID = $db->real_escape_string($_POST["sessionID"]);
-	$newRoomName = $db->real_escape_string($_POST["newRoomName"]);
-	$newRoomDescription = $db->real_escape_string($_POST["newRoomDescription"]);
+	$channelID = $db->real_escape_string($_POST["channelID"]);
+	$newChannelName = $db->real_escape_string($_POST["newChannelName"]);
+	$newChannelDescription = $db->real_escape_string($_POST["newChannelDescription"]);
 
-	$roomIsVisible = $db->real_escape_string($_POST["roomIsVisible"]);
-	$roomIsPublic = true;
-	$newRoomPassword = null;
-
-	# get userID from session ID
+	# get user ID
 	$queryResult = $db->query("select getSessionUser('$sessionID')");
 	if (!$queryResult) {
 		# handle errors
 		$ajaxResult["querySuccess"] = false;
 		$ajaxResult["errorCode"] = $db->errno;
-		$ajaxResult["failReason"] = $db->error;
 		exit(json_encode($ajaxResult));
 	}
 	$userID = $queryResult->fetch_row()[0];
 	free_all_results($db);
 
 	# check permissions
-	$queryResult = $db->query("select canEditRoomInfo('$userID', '$roomID')");
+	$queryResult = $db->query("select canEditChannelInfo('$userID', '$channelID')");
 	if (!$queryResult) {
+		# handle errors
 		$ajaxResult["querySuccess"] = false;
-		$ajaxResult["errorCode"] = $db->errno;
-		$ajaxResult["failReason"] = $db->error;
+		$ajaxResult["errorCode"] = $db->error;
 		exit(json_encode($ajaxResult));
 	}
 	if (!$queryResult->fetch_row()[0]) {
+		# indicate if permission not granted
 		$ajaxResult["querySuccess"] = false;
-		$ajaxResult["failReason"] = "Permission to change room settings not granted";
+		$ajaxResult["failReason"] = "Permission to edit channel settings not granted";
 		exit(json_encode($ajaxResult));
 	}
-	free_all_results($db);
 
 	# make changes
-	$queryResult = $db->query("call updateRoomInfo('$roomID', '$newRoomName', '$newRoomDescription', '$roomIsVisible', '$roomIsPublic', '$newRoomPassword')");
+	$queryResult = $db->query("call updateChannelInfo('$channelID', '$newChannelName', '$newChannelDescription')");
 	if (!$queryResult) {
 		$ajaxResult["querySuccess"] = false;
 		$ajaxResult["errorCode"] = $db->errno;
@@ -62,12 +56,8 @@ if ($db) {
 }
 else {
 	$ajaxResult["sqlConnectSuccess"] = false;
-	$ajaxResult["errorCode"] = $db->errno;
-	$ajaxResult["failReason"] = $db->error;
 }
 
 # return data
 echo json_encode($ajaxResult);
-#$db->close();
-
 ?>

@@ -47,8 +47,21 @@ if ($db) {
 			$ajaxResult["errorCode"] = $db->errno;
 			break;
 		}
+		free_all_results($db);
 
 		# check deleted rooms
+		$queryResult = $db->query("call getRoomDeletions('$lastUpdateTime')");
+		if (!$queryResult) {
+			$ajaxResult["querySuccess"] = false;
+			$ajaxResult["errorCode"] = $db->errno;
+			break;
+		}
+		$deletedRooms = $queryResult->fetch_all(MYSQLI_ASSOC);
+		if (count($deletedRooms) > 0) {
+			$ajaxResult["querySuccess"] = true;
+			$ajaxResult["deletedRooms"] = $deletedRooms;
+			$updatesDetected = true;
+		}
 
 		# free results
 		if (!$updatesDetected) {

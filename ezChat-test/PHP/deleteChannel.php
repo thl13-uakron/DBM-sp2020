@@ -1,6 +1,6 @@
 <?php
-# This script allows a user to change the name and description of a room, taking the roomID,
-# the user's sessionID, and the updated information as parameters
+# This script allows a user to delete a channel, taking the channelID and the user's sessionID, 
+# which allows the script to verify that the user has permission to perform this action
 
 # initialize result array
 $ajaxResult = array();
@@ -14,60 +14,50 @@ if ($db) {
 
 	# read parameters
 	$_POST = json_decode(file_get_contents('php://input'), true);
-	$roomID = $db->real_escape_string($_POST["roomID"]);
 	$sessionID = $db->real_escape_string($_POST["sessionID"]);
-	$newRoomName = $db->real_escape_string($_POST["newRoomName"]);
-	$newRoomDescription = $db->real_escape_string($_POST["newRoomDescription"]);
+	$channelID = $db->real_escape_string($_POST["channelID"]);
 
-	$roomIsVisible = $db->real_escape_string($_POST["roomIsVisible"]);
-	$roomIsPublic = true;
-	$newRoomPassword = null;
-
-	# get userID from session ID
+	# get user ID
 	$queryResult = $db->query("select getSessionUser('$sessionID')");
 	if (!$queryResult) {
 		# handle errors
 		$ajaxResult["querySuccess"] = false;
 		$ajaxResult["errorCode"] = $db->errno;
-		$ajaxResult["failReason"] = $db->error;
 		exit(json_encode($ajaxResult));
 	}
 	$userID = $queryResult->fetch_row()[0];
 	free_all_results($db);
 
 	# check permissions
-	$queryResult = $db->query("select canEditRoomInfo('$userID', '$roomID')");
+	$queryResult = $db->query("select canDeleteChannel('$userID', '$channelID')");
 	if (!$queryResult) {
+		# handle errors
 		$ajaxResult["querySuccess"] = false;
 		$ajaxResult["errorCode"] = $db->errno;
-		$ajaxResult["failReason"] = $db->error;
 		exit(json_encode($ajaxResult));
 	}
 	if (!$queryResult->fetch_row()[0]) {
+		# indicate if permission not granted
 		$ajaxResult["querySuccess"] = false;
-		$ajaxResult["failReason"] = "Permission to change room settings not granted";
+		$ajaxResult["failReason"] = "Permission to delete channel not granted";
 		exit(json_encode($ajaxResult));
 	}
-	free_all_results($db);
 
-	# make changes
-	$queryResult = $db->query("call updateRoomInfo('$roomID', '$newRoomName', '$newRoomDescription', '$roomIsVisible', '$roomIsPublic', '$newRoomPassword')");
+	# make deletion
+	$queryResult = $db->query("call deleteChannel('$channelID')");
 	if (!$queryResult) {
+		# handle errors
 		$ajaxResult["querySuccess"] = false;
 		$ajaxResult["errorCode"] = $db->errno;
-		$ajaxResult["failReason"] = $db->error;
 		exit(json_encode($ajaxResult));
 	}
 	$ajaxResult["querySuccess"] = true;
 }
 else {
 	$ajaxResult["sqlConnectSuccess"] = false;
-	$ajaxResult["errorCode"] = $db->errno;
-	$ajaxResult["failReason"] = $db->error;
 }
 
 # return data
 echo json_encode($ajaxResult);
-#$db->close();
 
 ?>

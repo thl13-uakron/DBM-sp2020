@@ -27,6 +27,7 @@ if ($db) {
 	free_all_results($db);
 
 	# log user presence
+	ini_set("display_errors", 0);
 	$queryResult = $db->query("call logChannelVisit('$userID', '$channelID')");
 	free_all_results($db);
 
@@ -43,7 +44,21 @@ if ($db) {
 			exit();
 		}
 
+		# check if channel was deleted
+		free_all_results($db);
+		$queryResult = $db->query("select channelWasDeleted('$channelID', '$lastUpdateTime')");
+		if (!$queryResult) {
+			$ajaxResult["querySuccess"] = false;
+			$ajaxResult["errorCode"] = $db->errno;
+			exit(json_encode($ajaxResult));
+		}
+		if ($queryResult->fetch_array()[0]) {
+			$ajaxResult["channelWasDeleted"] = true;
+			exit(json_encode($ajaxResult));
+		}
+
 		# record current time
+		free_all_results($db);
 		$queryResult = $db->query("select NOW()");
 		if (!$queryResult) {
 			$ajaxResult["querySuccess"] = false;
@@ -53,8 +68,25 @@ if ($db) {
 		$ajaxResult["updateTime"] = $queryResult->fetch_array()[0];
 
 		# check changes in permissions
+		free_all_results($db);
+		$queryResult = $db->query("call getChannelPermissionChanges('$channelID', '$lastUpdateTime')");
+		if (!$queryResult) {
+			$ajaxResult["querySuccess"] = false;
+			$ajaxResult["errorCode"] = $db->error;
+			exit(json_encode($ajaxResult));
+		}
+		$permissionSettings = $queryResult->fetch_all(MYSQLI_ASSOC);
+		$count = count($permissionSettings);
+		if ($count > 0) {
+			$ajaxResult["permissionSettings"] = array();
+			for ($i = 0; $i < $count; ++$i) {
+				$ajaxResult["permissionSettings"][$permissionSettings[$i]["permissionName"]] = $permissionSettings[$i];
+			}
+			$updatesDetected = true;
+		}
 
 		# check new and updated messages 
+		free_all_results($db);
 		$queryResult = $db->query("call getNewMessages('$channelID', '$lastUpdateTime')");
 		if ($queryResult) {
 			$newMessages = $queryResult->fetch_all(MYSQLI_ASSOC);

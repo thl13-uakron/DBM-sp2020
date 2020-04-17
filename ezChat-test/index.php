@@ -45,6 +45,10 @@
 		resize: none;
 	}
 
+	textarea:disabled {
+		background-color: rgb(235, 235, 235);
+	}
+
 	input {
 		flex-grow: 0.5;
 	}
@@ -139,7 +143,9 @@
 	.centerRegionElement {
 		position:fixed;
 		overflow-y: auto;
+		box-sizing: border-box;
 		width: 60%;
+		height: 100%;
 	}
 
 	#chatBox {
@@ -218,7 +224,6 @@
 	var cachedMessages = {};
 	var lastVisitedChannelByRoom = {};
 	var messageDrafts = {};
-	var roomPermissions = {};
 	var channelPermissions = {};
 
 	var channelUpdateController = new AbortController();
@@ -254,17 +259,218 @@
 		return d.toDateString() + " at " + d.toLocaleTimeString();
 	}
 
+	function getContextualTime(dateTime, currentTime) {
+		var difference = (Date.parse(currentTime) - Date.parse(dateTime)) / 1000;
+		if (difference < 60) {
+			return "less than a minute ago";
+		}
+		if (difference < 120) {
+			return "about a minute ago";
+		}
+		if (difference < 3600) {
+			return "about " + Math.floor(difference / 60) + " minutes ago";
+		}
+		if (difference < 7200) {
+			return "about an hour ago";
+		}
+		if (difference < 86400) {
+			return "about " + Math.floor(difference / 3600) + " hours ago";
+		}
+		if (difference < 172800) {
+			return "over a day ago";
+		}
+		return "about " + Math.floor(difference / 86400) + " days ago";
+	}
+
 	// functions for retrieving data from backend and dynamically generating page content
+	function isModerator(userID) {
+		if (!userID) {
+			var userID = document.getElementById("accountInfo").dataset.userID;
+		}
+		for (i in cachedRoomInfo[roomID]["moderators"]) {
+			if (cachedRoomInfo[roomID]["moderators"][i]["userID"] == userID) return true;
+		}
+		return false;
+	}
+	function isAdministrator(userID) {
+		if (!userID) {
+			var userID = document.getElementById("accountInfo").dataset.userID;
+		}
+		for (i in cachedRoomInfo[roomID]["administrators"]) {
+			if (cachedRoomInfo[roomID]["administrators"][i]["userID"] == userID) return true;
+		}
+		return false;
+	}
+	function getPermissionValue(permissionName) {
+		permissionValue = null;
+		if (channelPermissions[channelID][permissionName]) {
+			permissionValue = channelPermissions[channelID][permissionName]["permissionValue"];
+		}
+		if (permissionValue == null) {
+			permissionValue = cachedRoomInfo[roomID]["permissionSettings"][permissionName]["permissionValue"];
+		}
+		return permissionValue;
+	}
+	function hasPermission(permissionName) {
+		permissionValue = getPermissionValue(permissionName);
+
+		if (permissionValue == 1) {
+			return true;
+		}
+		if (permissionValue == 2) {
+			return document.getElementById("accountInfo").dataset.isRegistered == "true";
+		}
+		if (permissionValue == 3) {
+			return isModerator() || isAdministrator();
+		}
+		if (permissionValue == 4) {
+			return isAdministrator();
+		}
+		return false;
+	}
+	var entryAttempts = 0; // see if other channels in room can be entered
+	// used for indicating to users why they don't have permission to do something
+	var permissionValueDescriptors = {
+		2: "Only registered users",
+		3: "Only moderators or administrators of this room",
+		4: "Only administrators of this room"
+	}
+	function handlePermissions() {
+		if (cachedRoomInfo[roomID]["permissionSettings"]) {
+			if (!hasPermission("canEnter")) {
+				if (entryAttempts == 0) {
+					alert(permissionValueDescriptors[getPermissionValue("canEnter")] + " can enter this channel");
+					lastVisitedChannelByRoom[roomID] = null;
+					if (cachedRoomInfo[roomID]["channelList"].length > 1) {
+						++entryAttempts;
+						enterRoom(roomID);
+					}
+					else {
+						enterRoom(null);
+					}
+					return;
+				}
+				else {
+					entryAttempts = 0;
+					enterRoom(null);
+				}
+			}
+			else {
+				entryAttempts = 0;
+			}
+
+			var chatInput = document.getElementById("chatboxInput");
+			if (chatInput) {
+				if (!hasPermission("canPostMessages")) {
+					chatInput.disabled= true;
+					chatInput.value = permissionValueDescriptors[getPermissionValue("canPostMessages")] + " can post messages in this channel";
+				}
+				else {
+					if (chatInput.disabled) {
+						chatInput.disabled = false;
+						chatInput.value = "";
+					}
+				}
+			}
+
+			var roomOptionsElement = document.getElementById("roomOptionsElement");
+			if ((hasPermission("canEditRoomSettings"))) { // || hasPermission("canDeleteRoom"))) {
+				if (!document.getElementById("editRoomButton")) {
+					var editRoomButton = document.createElement("button");
+					editRoomButton.innerHTML = "Change Room Settings";
+					editRoomButton.className = "smallText bottomMargin";
+					editRoomButton.id = "editRoomButton";
+					editRoomButton.addEventListener("click", function() {
+						showRoomEditing(roomID);
+					})
+					roomOptionsElement.appendChild(editRoomButton);
+					roomOptionsElement.className = "padded bottomMargin";
+				}
+			}
+			else {
+				var editRoomButton = document.getElementById("editRoomButton");
+				if (editRoomButton) editRoomButton.remove();
+				roomOptionsElement.className = "";
+				if (document.getElementById("roomEditPanel")) {
+					enterChannel(channelID);
+					return;
+				}
+			}
+
+			var createChannelOption = document.getElementById("createChannelOption")
+			if (hasPermission("canAddChannel")) {
+				if (!document.getElementById("addChannelButton")) {
+					var addChannelButton = document.createElement("button");
+					addChannelButton.innerHTML = "Add Channel";
+					addChannelButton.className = "smallText";
+					addChannelButton.id = "addChannelButton";
+					addChannelButton.addEventListener("click", function() {
+						showChannelCreation();
+					})
+					createChannelOption.appendChild(addChannelButton);
+					createChannelOption.className = "padded bottomMargin";
+				}
+			}
+			else {
+				var addChannelButton = document.getElementById("addChannelButton");
+				if (addChannelButton) addChannelButton.remove();
+				createChannelOption.className = "";
+				if (document.getElementById("channelCreationPanel")) {
+					enterChannel(channelID);
+					return;
+				}
+			}
+
+			var channelEditOption = document.getElementById("channel" + channelID + "options");
+			var channelEditButton = document.getElementById("channelEditButton");
+			if (channelEditButton) channelEditButton.remove();
+			channelEditOption.className = "";
+			var userID = document.getElementById("accountInfo").dataset.userID;
+			if (userID == document.getElementById("channel" + channelID).dataset.creatorID || hasPermission("canEditChannelSettings")) { // || hasPermission("canDeleteChannels")) {
+				var channelEditButton = document.createElement("button");
+				channelEditButton.innerHTML = "Edit";
+				channelEditButton.className = "smallText";
+				channelEditButton.id = "channelEditButton";
+				channelEditButton.addEventListener("click", function() {
+					showChannelEditing(channelID);
+				});
+				channelEditOption.appendChild(channelEditButton);
+				channelEditOption.className = "padded bottomMargin";
+			}
+			else {
+				var channelEditButton = document.getElementById("channelEditButton");
+				if (channelEditButton) channelEditButton.remove();
+				channelEditOption.className = "";
+				if (document.getElementById("channelEditPanel")) {
+					enterChannel(channelID);
+					return;
+				}
+			}
+
+			if (hasPermission("canAppointModerators") || hasPermission("canAppointAdministrators")) {
+				//
+			}
+			else {
+				if (document.getElementById("addAdministratorButton") && !hasPermission("canAppointAdministrators")) document.getElementById("addAdministratorButton").remove();
+				if (document.getElementById("addModeratorButton") && !hasPermission("canModeratorAdministrators")) document.getElementById("addModeratorButton").remove();
+			}
+		}
+
+		return;
+	}
+
 	function getListedChannelElement(channelInfo, roomID) {
 		var element = document.createElement("div");
 		var elementID = "channel" + channelInfo["channelID"];
 		element.id = elementID;
 		element.className = "channelListing padded";
 		element.dataset.channelID = channelInfo["channelID"];
+		element.dataset.creatorID = channelInfo["creatorID"];
 
 		element.innerHTML = `
-		<span id="`+elementID+`"channelName" class="lightGrayText">` + escapeHTML(channelInfo["channelName"]) + `</span> 
+		<span id="`+elementID+`channelName" class="lightGrayText">` + escapeHTML(channelInfo["channelName"]) + `</span> 
 		<span class="normalText">(channelID: <span id="`+elementID+`channelID">` + channelInfo["channelID"] + `</span>)</span>
+		<span id="`+elementID+`options" class="smallText normalText"> </span>
 		`;
 
 		if (channelInfo["channelID"] == channelID) {
@@ -278,15 +484,17 @@
 		if (channelInfo["description"]) {
 			element.innerHTML += `
 			<br />
-			<span class="normalText smallText" id="`+elementID+`"description">
+			<span class="normalText smallText" id="`+elementID+`description">
 			`+channelInfo["description"]+`
 			</span>
 			`
 		}
 
 		element.addEventListener("click", function() {
-			channelID = channelInfo["channelID"];
-			enterChannel(roomID, channelID);
+			if (element.dataset.channelID != channelID) {
+				channelID = channelInfo["channelID"];
+				enterChannel(roomID, channelID);
+			}
 		});
 
 		return element;
@@ -327,9 +535,15 @@
 				updateTime = lastUpdateTime;
 				roomInfo = data["roomInfo"];
 				newChannels = data["newChannels"];
+				deletedChannels = data["deletedChannels"];
+				permissionSettings = data["permissionSettings"];
+				moderators = data["moderators"];
+				administrators = data["administrators"];
+				userList = data["userList"];
 
 				if (roomInfo) {
 					updateTime = data["updateTime"];
+					cachedRoomInfo[roomID]["roomInfo"] = roomInfo;
 					if (parent.dataset.roomID == roomID) {
 						var roomNameElement = document.getElementById("roomNameElement");
 						roomNameElement.innerHTML = roomInfo["roomName"];
@@ -367,8 +581,54 @@
 					}
 					showChannels(newChannels, roomID);
 				}
+
+				if (deletedChannels) {
+					updateTime = data["updateTime"];
+					cachedChannelList = cachedRoomInfo[roomID]["channelList"];
+					for (i in deletedChannels) {
+						document.getElementById("channel" + deletedChannels[i]["channelID"]).remove();
+						for (j in cachedChannelList) {
+							if (deletedChannels[i]["channelID"] == cachedChannelList[j]["channelID"]) {
+								cachedChannelList.splice(j, 1);
+								cachedRoomInfo[roomID]["channelList"].splice(j, 1);
+								break;
+							}
+						}
+					}
+				}
+
+				if (permissionSettings && permissionSettings.length > 0) {
+					updateTime = data["updateTime"];
+					for (i in permissionSettings) {
+						cachedRoomInfo[roomID]["permissionSettings"][i] = permissionSettings[i];
+						/*if (document.getElementById("roomEditPanel")) {
+							document.getElementById("permission" + permissionSettings[i]["permissionID"]).innerHTML = getPermissionSettingElement(permissionSettings[i]);
+						}*/
+					}
+				}
+
+				if (moderators) {
+					updateTime = data["updateTime"];
+					cachedRoomInfo[roomID]["moderators"] = moderators;
+				}
+				if (administrators) {
+					updateTime = data["updateTime"];
+					cachedRoomInfo[roomID]["administrators"] = administrators;
+				}
+
+				if (userList) {
+					updateTime = data["updateTime"];
+					cachedRoomInfo[roomID]["userList"] = userList;
+				}
+				showUserLists(cachedRoomInfo[roomID]["userList"]);
+
+				cachedRoomInfo[roomID]["updateTime"] = updateTime;
 				
 				setTimeout(() => getRoomInfoUpdates(roomID, updateTime), 1200);
+				/*if ((permissionSettings && permissionSettings.length > 0) || moderators || administrators) {
+					handlePermissions();
+				}*/
+				handlePermissions();
 			})
 			.catch(error => {
 				console.log(error);
@@ -379,6 +639,110 @@
 			})
 		}
 	}
+	var permissionSettingValues = {
+		0: "(Use room settings)",
+		1: "Everyone",
+		2: "Registered users only",
+		3: "Moderators and administrators only",
+		4: "Administrators only"
+	}
+	function showPermissionSettingElement(permissionInfo) {
+		var element = document.createElement("div");
+		var elementID = "permission" + permissionInfo["permissionID"];
+		element.id = elementID;
+		element.dataset.value = permissionInfo["permissionValue"];
+
+		var isChannelPermission = (document.getElementById("channelEditPanel") ? true : false);
+		if (isChannelPermission) {
+			var parent = document.getElementById("channelPermissionSettings");
+			parent.appendChild(element);
+		}
+		else {
+			var parent = document.getElementById("roomPermissionSettings");
+			parent.appendChild(element);
+		}
+
+		element.className = "padded bottomMargin";
+		element.innerHTML = `
+		Who can `+permissionInfo["descriptor"] + (isChannelPermission ? " this channel" : (permissionInfo["channelSpecific"] ? " this room" : "")) +`?
+		<br />
+		`;
+
+		for (i in permissionSettingValues) {
+			if ((i == 0 && isChannelPermission) || (i <= permissionInfo["maxVal"] && i >= permissionInfo["minVal"])) {
+				/*var permissionOptionElement = document.createElement("input");
+				element.appendChild(permissionOptionElement);
+				permissionOptionElement.type = "radio";
+				permissionOptionElement.name = elementID + "value";
+				permissionOptionElement.value = i;
+				if (permissionOptionElement.value == (element.dataset.value != "null" ? element.dataset.value : 0)) {
+					permissionOptionElement.checked = true;
+				}
+				permissionOptionElement.addEventListener("click", function() {
+					element = document.getElementById(elementID);
+					document.getElementById(elementID + "saveButton").disabled = false;
+					element.dataset.value = this.value;
+				});*/
+				element.innerHTML += `
+				<input type="radio" name="`+elementID+`option" value=`+i+` id="`+elementID+"option"+i+`">
+				`;
+				element.innerHTML += permissionSettingValues[i];
+				element.innerHTML += "<br />";
+			}
+		}
+
+		for (i in permissionSettingValues) {
+			var permissionOptionElement = document.getElementById(elementID + "option" + i);
+			if (permissionOptionElement) {
+				permissionOptionElement.value = i;
+				if (permissionOptionElement.value == (element.dataset.value != "null" ? element.dataset.value : 0)) {
+					permissionOptionElement.checked = true;
+				}
+				permissionOptionElement.addEventListener("click", function() {
+					element = document.getElementById(elementID);
+					document.getElementById(elementID + "saveButton").innerHTML = "Save";
+					document.getElementById(elementID + "saveButton").disabled = false;
+					element.dataset.value = this.value;
+				});
+			}
+		}
+
+		permissionSaveButton = document.createElement("button");
+		permissionSaveButton.innerHTML = "Saved";
+		permissionSaveButton.id = elementID + "saveButton";
+		permissionSaveButton.disabled = true;
+		permissionSaveButton.addEventListener("click", function() {
+			permissionSaveButton = this;
+			permissionSaveButton.disabled = true;
+			permissionSaveButton.innerHTML = "Saving...";
+			fetch("PHP/setPermission.php", {
+				method: "POST",
+				body: JSON.stringify({
+					channelID: (isChannelPermission ? channelID : null),
+					roomID: (isChannelPermission ? null : roomID),
+					sessionID: sessionID,
+					permissionID: permissionInfo["permissionID"],
+					permissionValue: (element.dataset.value != 0 ? element.dataset.value : null)
+				}),
+				signal: channelUpdateController.signal
+			})
+			.then(response => response.text())
+			.then(data => {
+				console.log(data);
+				data = JSON.parse(data);
+				if (data["querySuccess"]) {
+					permissionSaveButton.innerHTML = "Saved";
+				}
+				else {
+					alert("Unable to set permission" + (data["failReason"] ? ": " + data["failReason"] : ""))
+					permissionSaveButton.innerHTML = "Save";
+					permissionSaveButton.disabled = false;
+				}
+			})
+			.catch(error => console.log(error))
+		})
+		element.appendChild(permissionSaveButton);
+	}
 
 	function showChannelEditing(channelID) {
 		var parent = document.getElementById("centerRegion");
@@ -387,7 +751,7 @@
 		parent.innerHTML = `
 		<div id="channelEditPanel" class="padded centerRegionElement" style="overflow-y: auto">
 			<div class="padded boldText">
-				Edit Channel Details
+				Settings For Channel ` + channelID + `
 			</div>
 			<div class="padded">
 				Channel Name (1-24 characters): <span class="rowFlex"> <input id="channelNameInput" maxlength=24> </input> </span>
@@ -400,13 +764,21 @@
 				</div>
 			</div>
 			<div class="padded">
-				<button id="channelEditBackButton"> Go Back </button>
-				<button id="channelEditGoButton"> Create Channel </button>
+				<button id="channelEditGoButton"> Save Changes </button>
 			</div>
 			<div class="padded" id="channelEditStatus">
 			</div>
+			<div id="channelPermissionSettings">
+			</div>
+			<div class="padded" id="channelDeleteOption">
+			</div>
+			<div class="padded">
+				<button id="channelEditBackButton"> Go Back </button>
+			</div>
 		</div>
 		`;
+
+		document.getElementById("channelEditPanel").dataset.channelID = channelID;
 
 		var channelEditController = new AbortController();
 
@@ -417,6 +789,84 @@
 		})
 		var channelEditGoButton = document.getElementById("channelEditGoButton");
 		channelEditGoButton.disabled = true;
+
+		var channelNameInput = document.getElementById("channelNameInput");
+		channelNameInput.value = document.getElementById("channel" + channelID + "channelName").innerText;
+
+		var channelDescriptionInput = document.getElementById("channelDescriptionInput");
+		if (document.getElementById("channel" + channelID + "description")) {
+			channelDescriptionInput.value = document.getElementById("channel" + channelID + "description").innerText;
+		}
+
+		channelEditGoButton.addEventListener("click", function() {
+			channelEditStatus.innerHTML = "Saving Changes...";
+			fetch("PHP/updateChannelInfo.php", {
+				method: "POST",
+				body: JSON.stringify({
+					sessionID: sessionID,
+					channelID: channelID,
+					newChannelName: channelNameInput.value,
+					newChannelDescription: channelDescriptionInput.value
+				}),
+				signal: channelEditController.signal
+			})
+			.then(response => response.text())
+			.then(data => {
+				console.log(data);
+				data = JSON.parse(data);
+
+				if (data["querySuccess"]) {
+					channelEditStatus.innerHTML = "Changes Saved.";
+					channelEditGoButton.disabled = true;
+				}
+				else {
+					channelEditStatus.innerHTML = "Failed to make changes";
+					if (data["failReason"]) {
+						channelEditStatus.innerHTML = ": " + data["failReason"];
+					}
+				}
+			})
+		})
+
+		for (i in channelPermissions[channelID]) {
+			showPermissionSettingElement(channelPermissions[channelID][i]);
+		}
+
+		if (document.getElementById("channel" + channelID).dataset.creatorID == userID || hasPermission("canDeleteChannels")) {
+			var deleteChannelButton = document.createElement("button");
+			deleteChannelButton.innerHTML = "Delete";
+			deleteChannelButton.addEventListener("click", function() {
+				if (window.confirm("Are you sure you want to this channel? It can't be recovered.")) {
+					fetch("PHP/deleteChannel.php", {
+						method: "POST",
+						body: JSON.stringify({
+							sessionID: sessionID,
+							channelID: channelID
+						}),
+						signal: channelEditController.signal
+					})
+					.then(response => response.text())
+					.then(data => {
+						console.log(data);
+						enterRoom(roomID);
+					})
+					.catch(error => console.log(error))
+				}
+			})
+			var channelDeleteOption = document.getElementById("channelDeleteOption");
+			channelDeleteOption.innerHTML = "Delete Channel? ";
+			channelDeleteOption.appendChild(deleteChannelButton);
+			channelDeleteOption.className += " bottomMargin";
+		}
+
+		parent.addEventListener("keyup", function() {
+			if (channelNameInput.value.length > 0) {
+				channelEditGoButton.disabled = false;
+			}
+			else {
+				channelEditGoButton.disabled = true;
+			}
+		})
 	}
 
 	function showChannelCreation() {
@@ -424,7 +874,7 @@
 		channelUpdateController.abort();
 		channelUpdateController = new AbortController;
 		parent.innerHTML = `
-		<div id="channelCreationPanel" class="padded centerRegionElement" style="overflow-y: auto">
+		<div id="channelCreationPanel" class="padded centerRegionElement">
 			<div class="padded boldText">
 				Create a New Channel
 			</div>
@@ -508,9 +958,9 @@
 		channelUpdateController.abort();
 		channelUpdateController = new AbortController;
 		parent.innerHTML = `
-		<div id="roomEditPanel" class="padded centerRegionElement" style="overflow-y: auto">
+		<div id="roomEditPanel" class="padded centerRegionElement">
 			<div class="padded boldText">
-				Edit Room Details
+				Settings for Room ` + roomID + `
 			</div>
 			<div class="padded">
 				Room Name (1-32 characters): <span class="rowFlex"> <input id="roomNameInput" maxlength=32> </input> </span>
@@ -521,17 +971,23 @@
 				<div class="rowFlex">
 					<textarea id="roomDescriptionInput" maxlength=128></textarea>
 				</div>
-			</div>` 
-			/*<div class="padded">
-				<input type="radio" name="roomAccess" id="roomIsBrowsable"> Room appears in public list </input>
-				<br />
-				<input type="radio" name="roomAccess" id="roomIsNotBrowsable"> Room is only accessible by URL </input>
-			</div>*/ + `
+			</div> 
 			<div class="padded">
-				<button id="roomEditBackButton"> Go Back </button>
+				<input type="radio" name="roomAccess" id="roomIsVisible"> Room appears in public list </input>
+				<br />
+				<input type="radio" name="roomAccess" id="roomIsNotVisible"> Room is only accessible by URL </input>
+			</div>
+			<div class="padded">
 				<button id="roomEditGoButton"> Save Changes </button>
 			</div>
 			<div class="padded" id="roomEditStatus"> 
+			</div>
+			<div id="roomPermissionSettings">
+			</div>
+			<div class="padded" id="roomDeleteOption">
+			</div>
+			<div class="padded">
+				<button id="roomEditBackButton"> Go Back </button>
 			</div>
 		</div>
 		`;
@@ -552,9 +1008,18 @@
 		var roomDescriptionInput = document.getElementById("roomDescriptionInput");
 		roomDescriptionInput.value = cachedRoomInfo[roomID]["roomInfo"]["description"];
 
+		var roomIsVisible = document.getElementById("roomIsVisible");
+		var roomIsNotVisible = document.getElementById("roomIsNotVisible");
+		if (Number(cachedRoomInfo[roomID]["roomInfo"]["browsable"])) {
+			roomIsVisible.checked = true;
+		}
+		else {
+			roomIsNotVisible.checked = true;
+		}
+
 		var roomEditStatus = document.getElementById("roomEditStatus");
 
-		parent.addEventListener("keyup", function() {
+		function checkSaveButton() {
 			roomEditStatus.innerHTML = "";
 			if (roomNameInput.value.length > 0) {
 				roomEditGoButton.disabled = false;
@@ -562,7 +1027,11 @@
 			else {
 				roomEditGoButton.disabled = true;
 			}
-		});
+		}
+
+		parent.addEventListener("keyup", checkSaveButton);
+		roomIsVisible.addEventListener("click", checkSaveButton);
+		roomIsNotVisible.addEventListener("click", checkSaveButton);
 
 		roomEditGoButton.addEventListener("click", function() {
 			roomEditStatus.innerHTML = "Saving Changes...";
@@ -572,7 +1041,8 @@
 					sessionID: sessionID,
 					roomID: roomID,
 					newRoomName: roomNameInput.value,
-					newRoomDescription: roomDescriptionInput.value
+					newRoomDescription: roomDescriptionInput.value,
+					roomIsVisible: roomIsVisible.checked
 				}),
 				signal: roomEditController.signal
 			})
@@ -594,9 +1064,40 @@
 			})
 			.catch(error => console.log(error));
 		})
+
+		for (i in cachedRoomInfo[roomID]["permissionSettings"]) {
+			showPermissionSettingElement(cachedRoomInfo[roomID]["permissionSettings"][i]);
+		}
+
+		if (hasPermission("canDeleteRoom")) {
+			var deleteRoomButton = document.createElement("button");
+			deleteRoomButton.innerHTML = "Delete";
+			deleteRoomButton.addEventListener("click", function() {
+				if (window.confirm("Are you sure you want to this room? It can't be recovered.")) {
+					fetch("PHP/deleteRoom.php", {
+						method: "POST",
+						body: JSON.stringify({
+							sessionID: sessionID,
+							roomID: roomID
+						}),
+						signal: roomEditController.signal
+					})
+					.then(response => response.text())
+					.then(data => {
+						console.log(data);
+						enterRoom(null);
+					})
+					.catch(error => console.log(error))
+				}
+			})
+			var roomDeleteOption = document.getElementById("roomDeleteOption");
+			roomDeleteOption.innerHTML = "Delete Room? ";
+			roomDeleteOption.appendChild(deleteRoomButton);
+			roomDeleteOption.className += " bottomMargin";
+		}
 	}
 
-	function showRoomInfo_helper(roomID, roomInfo, roomPermissions, channelList, updateTime) {
+	function showRoomInfo_helper(roomID, roomInfo, userPermissions, channelList, updateTime) {
 		parent = document.getElementById("roomInfo");
 
 		if (parent.dataset.roomID == roomID) {
@@ -631,30 +1132,6 @@
 				roomDescriptionElement.innerHTML = escapeHTML(roomInfo["description"]);
 			}
 
-			var roomOptionsElement = document.getElementById("roomOptionsElement");
-
-			if (Number(roomPermissions["canEditRoomInfo"])) {
-				var editRoomButton = document.createElement("button");
-				editRoomButton.innerHTML = "Edit Room Info";
-				editRoomButton.className = "smallText bottomMargin";
-				editRoomButton.addEventListener("click", function() {
-					showRoomEditing(roomID);
-				})
-				roomOptionsElement.appendChild(editRoomButton);
-				roomOptionsElement.className = "padded bottomMargin";
-			}
-
-			if (Number(roomPermissions["canAddChannels"])) {
-				var addChannelButton = document.createElement("button");
-				addChannelButton.innerHTML = "Add Channel";
-				addChannelButton.className = "smallText";
-				addChannelButton.addEventListener("click", function() {
-					showChannelCreation();
-				})
-				document.getElementById("createChannelOption").appendChild(addChannelButton);
-				document.getElementById("createChannelOption").className = "padded bottomMargin";
-			}
-
 			showChannels(channelList, roomID);
 
 			// poll for future updates
@@ -662,7 +1139,7 @@
 		}
 	}
 
-	function showRoomInfo(roomID, channelID) {
+	function showRoomInfo(channelID) {
 		var parent = document.getElementById("roomInfo");
 		roomInfoController = new AbortController();
 		roomInfoSignal = roomInfoController.signal;
@@ -678,21 +1155,25 @@
 		})
 		.then(response => response.text())
 		.then(data => {
-			console.log(data);
+			// console.log(data);
 			data = JSON.parse(data);
 
 			channelInfo = data["channelInfo"];
+			channelPermissions[channelID] = data["permissionSettings"];
 			if (channelInfo) {
 				roomID = channelInfo["roomID"];
 				if (roomID) {
 					// update room List
 					var previousRoomListing = document.getElementsByClassName("roomListing selectedListing")[0];
+					var roomListing = document.getElementById("room" + roomID);
 					if (previousRoomListing && previousRoomListing.dataset.roomID != roomID) {
 						previousRoomListing.className = previousRoomListing.className.replace('selectedListing', "clickableListing");
-						var roomListing = document.getElementById("room" + roomID);
 						if (roomListing) {
 							roomListing.className = roomListing.className.replace("clickableListing", "selectedListing");
 						}
+					}
+					else if (roomListing && !roomListing.className.match("selectedListing")) {
+						roomListing.className += " selectedListing";
 					}
 
 					// log channel
@@ -717,23 +1198,32 @@
 							})
 							.then(response => response.text())
 							.then(data => {
-								console.log(data);
+								// console.log(data);
 								data = JSON.parse(data);
 
 								roomInfo = data["roomInfo"];
 								updateTime = data["updateTime"];
-								roomPermissions = data["roomPermissions"];
+								userPermissions = data["userPermissions"];
+								permissionSettings = data["permissionSettings"];
+								administrators = data["administrators"];
+								moderators = data["moderators"];
 								channelList = data["channelList"];
+								userList = data["userList"];
 
 								cachedRoomInfo[roomID] = {
 									"roomInfo": roomInfo, 
 									"updateTime": updateTime, 
-									"roomPermissions": roomPermissions,
-									"channelList": channelList
+									"userPermissions": userPermissions,
+									"channelList": channelList,
+									"permissionSettings": permissionSettings,
+									"administrators": administrators,
+									"moderators": moderators,
+									"userList": userList
 								};
 
-								showRoomInfo_helper(roomID, roomInfo, roomPermissions, channelList, updateTime);
-
+								showRoomInfo_helper(roomID, roomInfo, userPermissions, channelList, updateTime);
+								showUserLists(userList);
+								handlePermissions();
 							})
 							.catch(error => console.log(error));
 						}
@@ -742,9 +1232,11 @@
 							roomInfo = cachedRoomInfo[roomID]["roomInfo"];
 							channelList = cachedRoomInfo[roomID]["channelList"];
 							updateTime = cachedRoomInfo[roomID]["updateTime"];
-							roomPermissions = cachedRoomInfo[roomID]["roomPermissions"];
+							userPermissions = cachedRoomInfo[roomID]["userPermissions"];
 
-							showRoomInfo_helper(roomID, roomInfo, roomPermissions, channelList, updateTime);
+							showRoomInfo_helper(roomID, roomInfo, userPermissions, channelList, updateTime);
+							showUserLists(cachedRoomInfo[roomID]["userList"]);
+							handlePermissions();
 						}
 					}
 					else {
@@ -752,11 +1244,13 @@
 						var previousChannelListing = document.getElementsByClassName("channelListing selectedListing")[0];
 						if (previousChannelListing && previousChannelListing.dataset.channelID != channelID) {
 							previousChannelListing.className = previousChannelListing.className.replace('selectedListing', "clickableListing");
-							var channelListing = document.getElementById("channel" + channelID);
-							if (channelListing) {
-								channelListing.className = channelListing.className.replace("clickableListing", "selectedListing");
-							}
+							if (document.getElementById("channelEditButton")) document.getElementById("channelEditButton").remove();
 						}
+						var channelListing = document.getElementById("channel" + channelID);
+						if (channelListing) {
+							channelListing.className = channelListing.className.replace("clickableListing", "selectedListing");
+						}
+						handlePermissions();
 					}
 				}
 				else {
@@ -764,6 +1258,7 @@
 				}
 			}
 			else {
+				lastVisitedChannelByRoom[roomID] = null;
 				if (!roomID) roomID = defaultRoomID;
 				enterRoom(roomID);
 			}
@@ -775,7 +1270,7 @@
 		channelUpdateController.abort();
 		channelUpdateController = new AbortController;
 		parent.innerHTML = `
-		<div id="roomCreationPanel" class="padded centerRegionElement" style="overflow-y: auto">
+		<div id="roomCreationPanel" class="padded centerRegionElement">
 			<div class="padded boldText">
 				Create a New Room
 			</div>
@@ -966,12 +1461,28 @@
 			if (updatedRooms) {
 				for (i in updatedRooms) {
 					var roomListing = document.getElementById("room" + updatedRooms[i]["roomID"]);
-					if (roomListing) {
-						roomListing.innerHTML = getListedRoomElement(updatedRooms[i]).innerHTML;
+					if (updatedRooms[i]["browsable"] != "0") {
+						if (roomListing) {
+							roomListing.hidden = false;
+							roomListing.innerHTML = getListedRoomElement(updatedRooms[i]).innerHTML;
+						}
+						else {
+							document.getElementById("allRoomsBody").appendChild(getListedRoomElement(updatedRooms[i]));
+						}
 					}
 					else {
-						document.getElementById("allRoomsBody").appendChild(getListedRoomElement(updatedRooms[i]));
+						if (roomListing && roomListing.parentElement.id == "allRoomsBody") {
+							roomListing.hidden = true;
+						}
 					}
+				}
+			}
+
+			var deletedRooms = data["deletedRooms"];
+			if (deletedRooms) {
+				for (i in deletedRooms) {
+					document.getElementById("room" + deletedRooms[i]["roomID"]).remove();
+					cachedRoomInfo[deletedRooms[i]["roomID"]] = null;
 				}
 			}
 
@@ -1341,6 +1852,7 @@
 
 			if (data["isRegistered"]) {
 				// options for registered users
+				parent.dataset.isRegistered = true;
 				showRegisteredAccountOptions({
 					screenName: data["screenName"], 
 					accountName: data["accountInfo"]["accountName"]
@@ -1461,7 +1973,7 @@
 		var userID = document.getElementById("accountInfo").dataset.userID;
 
 		// show option to edit message if applicable
-		if (userID == senderID) {
+		if (userID == senderID && hasPermission("canEditMessages")) {
 			var editButton = document.createElement("button");
 			editButton.innerHTML = "Edit";
 			editButton.className = "smallText";
@@ -1472,7 +1984,8 @@
 		}
 
 		// show option to delete message if applicable
-		if (userID == senderID || userID == document.getElementById("creatorIDElement").innerHTML) {
+		if ((userID == senderID && hasPermission("canDeleteOwnMessages")) 
+			|| (hasPermission("canDeleteUserMessages") && !isModerator(senderID) && !isAdministrator(senderID))) {
 			var deleteButton = document.createElement("button");
 			deleteButton.innerHTML = "Delete";
 			deleteButton.className = "smallText";
@@ -1546,6 +2059,7 @@
 		parent = document.getElementById("messageStream");
 		for (i in messageList) {			// exit if no longer viewing current channel
 			if (!parent || parent.dataset.channelID != channelID) return;
+			if (messageList[i]["channelID"] && messageList[i]["channelID"] != channelID) continue;
 
 			// add message to stream
 			messageElement = document.getElementById("message" + messageList[i]["messageID"]);
@@ -1589,56 +2103,80 @@
 			console.log(data);
 			data = JSON.parse(data);
 
-			parent = document.getElementById("messageStream");
-			if (!parent || parent.dataset.channelID != channelID) return;
-
-			var scrolledToBottom = parent.scrollHeight - parent.clientHeight <= parent.scrollTop + 1;
-
-			updateTime = lastUpdateTime;
-
-			// display new messages
-			newMessages = data["newMessages"];
-			if (newMessages) {
-				showMessages(newMessages, channelID);
-				cachedMessages[channelID]["updateTime"] = data["updateTime"];
-				updateTime = data["updateTime"];
+			// leave channel if it gets deleted
+			if (data["channelWasDeleted"]) {
+				cachedMessages[channelID] = null;
+				messageDrafts[channelID] = "";
+				channelPermissions[channelID] = null;
+				enterChannel(roomID, channelID);
 			}
+			else {
+				parent = document.getElementById("messageStream");
+				if (!parent || parent.dataset.channelID != channelID) return;
 
-			// handle name changes
-			nameChanges = data["nameChanges"];
-			if (nameChanges) {
-				for (i in cachedMessages[channelID]["messageList"]) {
-					var senderID = cachedMessages[channelID]["messageList"][i]["userID"];
-					if (nameChanges[senderID]) {
-						document.getElementById("message" + cachedMessages[channelID]["messageList"][i]["messageID"] + "screenName").innerHTML = escapeHTML(nameChanges[senderID]);
+				var scrolledToBottom = parent.scrollHeight - parent.clientHeight <= parent.scrollTop + 1;
+
+				updateTime = lastUpdateTime;
+
+				// display new messages
+				newMessages = data["newMessages"];
+				if (newMessages) {
+					showMessages(newMessages, channelID);
+					cachedMessages[channelID]["updateTime"] = data["updateTime"];
+					updateTime = data["updateTime"];
+				}
+
+				// handle name changes
+				nameChanges = data["nameChanges"];
+				if (nameChanges) {
+					for (i in cachedMessages[channelID]["messageList"]) {
+						var senderID = cachedMessages[channelID]["messageList"][i]["userID"];
+						if (nameChanges[senderID]) {
+							document.getElementById("message" + cachedMessages[channelID]["messageList"][i]["messageID"] + "screenName").innerHTML = escapeHTML(nameChanges[senderID]);
+						}
+					}
+					updateTime = data["updateTime"];
+					if (roomID) {
+						showUserLists(cachedRoomInfo[roomID]["userList"]);
 					}
 				}
-				updateTime = data["updateTime"];
-			}
 
-			// handle deleted messages
-			deletedMessages = data["deletedMessages"];
-			if (deletedMessages) {
-				for (i in cachedMessages[channelID]["messageList"]) {
-					var messageListing = cachedMessages[channelID]["messageList"][i];
-					if (deletedMessages[messageListing["messageID"]] 
-						&& Date.parse(deletedMessages[messageListing["messageID"]]["deleteTime"]) > Date.parse(messageListing["sendTime"])) {
-						cachedMessages[channelID]["messageList"].splice(i, 1);
-						document.getElementById("message" + messageListing["messageID"]).remove();
+				// handle deleted messages
+				deletedMessages = data["deletedMessages"];
+				if (deletedMessages) {
+					for (i in cachedMessages[channelID]["messageList"]) {
+						var messageListing = cachedMessages[channelID]["messageList"][i];
+						if (deletedMessages[messageListing["messageID"]] 
+							&& Date.parse(deletedMessages[messageListing["messageID"]]["deleteTime"]) > Date.parse(messageListing["sendTime"])) {
+							cachedMessages[channelID]["messageList"].splice(i, 1);
+							document.getElementById("message" + messageListing["messageID"]).remove();
+						}
+					}
+					updateTime = data["updateTime"];
+				}
+
+				// handle permission changes
+				permissionSettings = data["permissionSettings"];
+				if (permissionSettings && permissionSettings.length > 0) {
+					updateTime = data["updateTime"];
+					for (i in permissionSettings) {
+						cachedRoomInfo[roomID]["permissionSettings"][i] = permissionSettings[i];
 					}
 				}
-				updateTime = data["updateTime"];
-			}
 
-			// keep message stream scrolled to bottom if currently scrolled to bottom
-			parent = document.getElementById("messageStream");
-			if (!parent || parent.dataset.channelID != channelID) return;
-			if (scrolledToBottom) {
-				parent.scrollTop = parent.scrollHeight - parent.clientHeight;
-			}
+				// keep message stream scrolled to bottom if currently scrolled to bottom
+				parent = document.getElementById("messageStream");
+				if (!parent || parent.dataset.channelID != channelID) return;
+				if (scrolledToBottom) {
+					parent.scrollTop = parent.scrollHeight - parent.clientHeight;
+				}
 
-			// fetch additional updates
-			setTimeout(() => { getChatUpdates(channelID, updateTime); }, 1000);
+				// fetch additional updates
+				setTimeout(() => { getChatUpdates(channelID, updateTime); }, 1000);
+				if (permissionSettings && permissionSettings.length > 0) {
+					handlePermissions();
+				}
+			}
 		})
 		.catch(error => {
 			console.log(error);
@@ -1658,7 +2196,7 @@
 			<div id="chatBox" class="padded columnFlex centerRegionElement">
 				<textarea style="flex-grow: 1" id="chatboxInput" class="bottomMargin"></textarea>
 				<div id="chatboxFooter" style="flex-grow:0" class="rowFlex"> 
-					<span id="chatboxInfo" class="smallText" style="flex-grow:1"> ENTER to send, SHIFT+ENTER to create line break </span>
+					<span id="chatboxInfo" class="smallText" style="flex-grow:1"> <span id="characterCount"></span> / <span id="maxMessageLength"></span> characters.  Press ENTER to send. </span>
 					<button id="sendButton" class="rightFlexAlign" style="flex-grow:0"> Send Message </button>
 				</div>
 			</div>
@@ -1669,6 +2207,9 @@
 		messageStream.dataset.channelID = channelID;
 		var chatInput = document.getElementById("chatboxInput");
 		var sendButton = document.getElementById("sendButton");
+
+		var characterCount = document.getElementById("characterCount");
+		var maxMessageLength = document.getElementById("maxMessageLength");
 
 		messageStream.innerHTML = "Loading Messages...";
 		if (!cachedMessages[channelID]) {
@@ -1719,16 +2260,21 @@
 		chatInput.style.rows = 4;
 		chatInput.placeholder = "Type your message here";
 
+		maxMessageLength.innerHTML = chatInput.maxLength;
+
 		if (messageDrafts[channelID]) {
 			chatInput.value = messageDrafts[channelID];
 		}
 		chatInput.focus();
+
+		characterCount.innerHTML = chatInput.value.length;
 
 		// set event handlers
 		if (chatInput.value.length == 0) {
 			sendButton.disabled = true;
 		}
 		chatInput.addEventListener("keyup", function(e) {
+			characterCount.innerHTML = chatInput.value.length;
 			if (e.keyCode == 13 && !e.shiftKey) {
 				// send message if enter pressed
 				sendButton.click();
@@ -1745,6 +2291,9 @@
 				messageDrafts[channelID] = chatInput.value;
 			}
 		});
+		chatInput.addEventListener("change", function() {
+			characterCount.innerHTML = chatInput.value.length;
+		})
 		sendButton.addEventListener("click", function() {
 			if (chatInput.value.length > 0) {
 				var messageContent = chatInput.value;
@@ -1770,6 +2319,7 @@
 
 					chatInput.readonly = false;
 					chatInput.value = "";
+					characterCount.innerHTML = chatInput.value.length;
 				})
 				.catch(error => console.log(error));
 			}
@@ -1777,13 +2327,220 @@
 				sendButton.disabled = true;
 			}
 		})
+
+		if (cachedRoomInfo[roomID]) {
+			handlePermissions();
+		}
 	}
 
-	function showUserLists(roomID, channelID) {
+	function getUserElement(userInfo) {
+		userElement = document.createElement("div");
+		elementID = "user" + userInfo["userID"];
+		userElement.id = elementID;
+		userElement.dataset.userID = userInfo["userID"];
+		userElement.dataset.screenName = userInfo["screenName"];
+		userElement.className = "bottomMargin " + (userInfo["userID"] == userID ? "selectedListing" : "clickableListing");
+		userElement.innerHTML = `
+		<span id="`+elementID+`screenName" class="lightGrayText">`+escapeHTML(userInfo["screenName"])+`</span>
+		<span class="normalText darkGrayText"> (userID: <span id="`+elementID+`userID">`+userInfo["userID"]+`</span>) </span>
+		<span id="`+elementID+`options"></span>
+		`;
+
+		if (userInfo["updateTime"]) {
+			userElement.innerHTML += `
+			<br />
+			<span class="smallText normalText grayText">Visited this room `+ getContextualTime(userInfo["updateTime"], cachedRoomInfo[roomID]["updateTime"]) + `</span>
+			`;
+		}
+		else {
+			userElement.innerHTML += `
+			<br />
+			<span class="smallText normalText grayText">No recent activity in this room</span>
+			`;
+		}
+
+		userElement.addEventListener("mouseenter", function() {
+			var userElement = this;
+			if (!userElement.dataset.hover || userElement.dataset.hover == "false") {
+				userElement.dataset.hover = true;
+				if (userElement.dataset.userID != userID && 
+					(isModerator(userElement.dataset.userID) && hasPermission("canAppointModerators"))
+					|| (isAdministrator(userElement.dataset.userID) && hasPermission("canAppointAdministrators") && cachedRoomInfo[roomID]["administrators"].length > 1) ) {
+					removeModeratorButton = document.createElement("button");
+					removeModeratorButton.className = "smallText";
+					removeModeratorButton.innerHTML = "Remove";
+					removeModeratorButton.addEventListener("click", function() {
+						if (window.confirm("Remove " + userElement.dataset.screenName + " from the moderation team?")) {
+							fetch("PHP/addModerator.php", {
+								method: "POST",
+								body: JSON.stringify({
+									sessionID: sessionID,
+									roomID: roomID,
+									moderatorID: userElement.dataset.userID,
+									rank: null
+								})
+							})
+							.then(response => response.text())
+							.then(data => {
+								console.log(data);
+							})
+							.catch(error => console.log(error))
+						}
+					})
+					document.getElementById("user" + userElement.dataset.userID + "options").appendChild(removeModeratorButton);
+				}
+			}
+		})
+		userElement.addEventListener("mouseleave", function() {
+			var userElement = this;
+			userElement.dataset.hover = false;
+			document.getElementById("user" + userElement.dataset.userID + "options").innerHTML = "";
+		})
+
+		return userElement;
+	}
+
+	function showUserLists(userList) {
 		var parent = document.getElementById("userList");
 		parent.innerHTML =
 		`
+		<div id="administratorsHeader" class="padded boldText silverText"> Room Administrators </div>
+		<div id="administratorsBody" class="padded bottomMargin"></div>
+		<div id="moderatorsHeader" class="padded boldText silverText"> Room Moderators </div>
+		<div id="moderatorsBody" class="padded bottomMargin"></div>
+		<div id="usersHeader" class="padded boldText silverText"> Other Recently Online Users </div>
+		<div id="usersBody" class="padded bottomMargin"></div>
 		`;
+
+		for (i in userList) {
+			if (!document.getElementById("user" + userList[i]["userID"])) {
+				userElement = getUserElement(userList[i]);
+				if (isAdministrator(userElement.dataset.userID)) {
+					document.getElementById("administratorsBody").appendChild(userElement);
+				}
+				else if (isModerator(userElement.dataset.userID)) {
+					if (!document.getElementById("user" + userList[i]["userID"])) {
+						document.getElementById("moderatorsBody").appendChild(userElement);
+					}
+				}
+				if (!document.getElementById("user" + userElement.dataset.userID)) {
+					if (!isModerator(userElement.dataset.userID)) {
+						document.getElementById("usersBody").appendChild(userElement);
+					}
+					else {
+						document.getElementById("moderatorsBody").appendChild(userElement);
+					}
+				}
+			}
+		}
+
+		var moderators = cachedRoomInfo[roomID]["moderators"];
+		for (i in moderators) {
+			if (!document.getElementById("user" + moderators[i]["userID"])) {
+				document.getElementById("moderatorsBody").appendChild(getUserElement(moderators[i]));
+			}
+		}
+
+		var administrators = cachedRoomInfo[roomID]["administrators"];
+		for (i in administrators) {
+			if (!document.getElementById("user" + administrators[i]["userID"])) {
+				document.getElementById("administratorsBody").appendChild(getUserElement(administrators[i]));
+			}
+		}
+
+		if (hasPermission("canAppointModerators")) {
+			addModeratorButton = document.createElement("button");
+			addModeratorButton.innerHTML = "Add Moderator";
+			addModeratorButton.className = "smallText bottomMargin";
+			addModeratorButton.id = "addModeratorButton";
+			addModeratorButton.addEventListener("click", function() {
+				var moderatorID = window.prompt("Enter the ID of the user to add as a moderator (registered users only)");
+				moderatorID = (moderatorID != null && moderatorID != "" ? Number(moderatorID) : null);
+				if (moderatorID != null && moderatorID != NaN) {
+					fetch("PHP/addModerator.php", {
+						method: "POST",
+						body: JSON.stringify({
+							sessionID: sessionID,
+							roomID: roomID,
+							moderatorID: moderatorID,
+							rank: 0
+						})
+					})
+					.then(response => response.text())
+					.then(data => {
+						console.log(data);
+						data = JSON.parse(data);
+						if (!data["querySuccess"]) {
+							if (data["failReason"]) alert("Error: " + data["failReason"]);
+						}
+					})
+					.catch(error => console.log(error))
+				}
+			})
+			document.getElementById("moderatorsBody").appendChild(addModeratorButton);
+		}
+
+		if (hasPermission("canAppointAdministrators")) {
+			addAdministratorButton = document.createElement("button");
+			addAdministratorButton.innerHTML = "Add Administrator";
+			addAdministratorButton.className = "smallText bottomMargin";
+			addAdministratorButton.id = "addAdministratorButton";
+			addAdministratorButton.addEventListener("click", function() {
+				var moderatorID = window.prompt("Enter the ID of the user to add as an administrator (registered users only)");
+				moderatorID = (moderatorID != null && moderatorID != "" ? Number(moderatorID) : null);
+				if (moderatorID != null && moderatorID != NaN) {
+					fetch("PHP/addModerator.php", {
+						method: "POST",
+						body: JSON.stringify({
+							sessionID: sessionID,
+							roomID: roomID,
+							moderatorID: moderatorID,
+							rank: 1
+						})
+					})
+					.then(response => response.text())
+					.then(data => {
+						console.log(data);
+						data = JSON.parse(data);
+						if (!data["querySuccess"]) {
+							if (data["failReason"]) alert("Error: " + data["failReason"]);
+						}
+					})
+					.catch(error => console.log(error))
+				}
+			})
+			document.getElementById("administratorsBody").appendChild(addAdministratorButton);
+		}
+	}
+
+	function enterLastChannel() {
+		// go to most recently-visited channel that 
+	}
+
+	function enterRoom_helper(roomID) {
+		fetch("PHP/getChannelsByRoom.php", {
+			method: "POST",
+			body: JSON.stringify({
+				roomID: roomID 
+			})
+		})
+		.then(response => response.text())
+		.then(data => {
+			console.log(data);
+			data = JSON.parse(data);
+
+			if (data["channelList"]) {
+				// enter first listed channel
+				channelID = data["channelList"][0]["channelID"];
+				enterChannel(roomID, channelID);
+			}
+			else {
+				enterRoom(defaultRoomID);
+			}
+		}).catch(error => {
+			console.log(error);
+			enterRoom(defaultRoomID);
+		});
 	}
 
 	function enterRoom(roomID) {
@@ -1796,10 +2553,11 @@
 		}
 		else {
 			// get list of channels associated with room if room not visited before
-			fetch("PHP/getChannelsByRoom.php", {
+			fetch("PHP/getLastValidChannel.php", {
 				method: "POST",
 				body: JSON.stringify({
-					roomID: roomID 
+					roomID: roomID,
+					sessionID: sessionID 
 				})
 			})
 			.then(response => response.text())
@@ -1807,16 +2565,18 @@
 				console.log(data);
 				data = JSON.parse(data);
 
-				if (data["channelList"]) {
-					// enter first listed channel
-					channelID = data["channelList"][0]["channelID"];
+				if (data["channelID"]) {
+					channelID = data["channelID"];
 					enterChannel(roomID, channelID);
 				}
 				else {
-					enterRoom(defaultRoomID);
+					enterRoom_helper(roomID);
 				}
 			})
-			.catch(error => console.log(error));
+			.catch(error => {
+				console.log(error);
+				enterRoom_helper(roomID);
+			});
 		}
 	}
 
@@ -1826,14 +2586,16 @@
 		roomID = p_roomID;
 		channelID = p_channelID;
 
+		if (channelID == 0) channelID = 1;
+
 		if (channelID) {
 			// record channelID and display channel information and chat stream
 			document.cookie = "channelID=" + channelID;
 			history.replaceState({channelID: channelID}, "", "?channelID=" + channelID);
 
-			showRoomInfo(roomID, channelID);
+			showRoomInfo(channelID);
 			showChat(channelID);
-			showUserLists(roomID, channelID);
+			// showUserLists(roomID, channelID);
 		}
 		else {
 			// get channelID from roomID if channelID is null
@@ -1882,8 +2644,12 @@
 			$sessionID = $_COOKIE["guestSessionID"];
 		}
 		$queryResult = $db->query("select getSessionUser('$sessionID')");
+		$userID = null;
 		if (!$queryResult || !$queryResult->fetch_row()[0]) {
 			$sessionID = null;
+		}
+		else if ($queryResult->fetch_row()) {
+			$userID = $queryResult->fetch_row()[0];
 		}
 		echo $sessionID;
 	?>`;
@@ -1910,6 +2676,12 @@
 			$channelID = $_COOKIE["channelID"];
 			if (!isValidChannel($db, $channelID)) {
 				$channelID = null;
+			}
+		}
+		if (!$channelID) {
+			$queryResult = $db->query("select getLastVisitedChannel('$userID', null)");
+			if ($queryResult) {
+				$channelID = $queryResult->fetch_row()[0];
 			}
 		}
 		echo $channelID;

@@ -74,8 +74,55 @@ if ($db) {
 		free_all_results($db);
 
 		# get changes to room permissions
+		free_all_results($db);
+		$queryResult = $db->query("call getRoomPermissionChanges('$roomID', '$lastUpdateTime')");
+		if (!$queryResult) {
+			$ajaxResult["querySuccess"] = false;
+			$ajaxResult["errorCode"] = $db->error;
+			exit(json_encode($ajaxResult));
+		}
+		$permissionSettings = $queryResult->fetch_all(MYSQLI_ASSOC);
+		$count = count($permissionSettings);
+		if ($count > 0) {
+			$ajaxResult["permissionSettings"] = array();
+			for ($i = 0; $i < $count; ++$i) {
+				$ajaxResult["permissionSettings"][$permissionSettings[$i]["permissionName"]] = $permissionSettings[$i];
+			}
+			$updatesDetected = true;
+		}
+
+		# get changes to moderation team
+		free_all_results($db);
+		$queryResult = $db->query("call getModerationChanges('$roomID', '$lastUpdateTime')");
+		if (!$queryResult) {
+			$ajaxResult["querySuccess"] = false;
+			$ajaxResult["errorCode"] = $db->error;
+			exit(json_encode($ajaxResult));
+		}
+		$moderationChanges = $queryResult->fetch_all(MYSQLI_ASSOC);
+		if (count($moderationChanges) > 0) {
+			free_all_results($db);
+			$queryResult = $db->query("call getAdministrators('$roomID')");
+			if (!$queryResult) {
+				$ajaxResult["querySuccess"] = false;
+				$ajaxResult["errorCode"] = $db->error;
+				exit(json_encode($ajaxResult));
+			}
+			$ajaxResult["administrators"] = $queryResult->fetch_all(MYSQLI_ASSOC);
+
+			free_all_results($db);
+			$queryResult = $db->query("call getModerators('$roomID')");
+			if (!$queryResult) {
+				$ajaxResult["querySuccess"] = false;
+				$ajaxResult["errorCode"] = $db->error;
+				exit(json_encode($ajaxResult));
+			}
+			$ajaxResult["moderators"] = $queryResult->fetch_all(MYSQLI_ASSOC);
+			$updatesDetected = true;
+		}
 
 		# get new or edited channels
+		free_all_results($db);
 		$queryResult = $db->query("call getNewChannels('$roomID', '$lastUpdateTime')");
 		if (!$queryResult) {
 			$ajaxResult["querySuccess"] = false;
@@ -88,8 +135,41 @@ if ($db) {
 			$ajaxResult["newChannels"] = $newChannels;
 			$updatesDetected = true;
 		}
+		free_all_results($db);
 
 		# get deleted channels
+		$queryResult = $db->query("call getChannelDeletions('$roomID', '$lastUpdateTime')");
+		if (!$queryResult) {
+			$ajaxResult["querySuccess"] = false;
+			$ajaxResult["errorCode"] = $db->errno;
+			break;
+		}
+		$deletedChannels = $queryResult->fetch_all(MYSQLI_ASSOC);
+		if (count($deletedChannels) > 0) {
+			$ajaxResult["querySuccess"] = true;
+			$ajaxResult["deletedChannels"] = $deletedChannels;
+			$updatesDetected = true;
+		}
+
+		free_all_results($db);
+		$queryResult = $db->query("call getRecentRoomUsers('$roomID', '$lastUpdateTime')");
+		if (!$queryResult) {
+			$ajaxResult["querySuccess"] = false;
+			$ajaxResult["errorCode"] = $db->error;
+			exit(json_encode($ajaxResult));
+		}
+		$newUsers = $queryResult->fetch_all(MYSQLI_ASSOC);
+		if (count($newUsers) > 0) {
+			free_all_results($db);
+			$queryResult = $db->query("call getRecentRoomUsers('$roomID', null)");
+			if (!$queryResult) {
+				$ajaxResult["querySuccess"] = false;
+				$ajaxResult["errorCode"] = $db->error;
+				exit(json_encode($ajaxResult));
+			}
+			$ajaxResult["userList"]  = $queryResult->fetch_all(MYSQLI_ASSOC);
+			$updatesDetected = true;
+		}
 
 		# wait before iterating again
 		if (!$updatesDetected) {

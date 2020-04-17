@@ -24,6 +24,20 @@ if ($db) {
 		# record data
 		$ajaxResult["querySuccess"] = true;
 		$ajaxResult["channelInfo"] = $channelInfo;
+
+		free_all_results($db);
+		$queryResult = $db->query("call getChannelPermissionSettings('$channelID')");
+		if (!$queryResult) {
+			$ajaxResult["querySuccess"] = false;
+			$ajaxResult["errorCode"] = $db->error;
+			exit(json_encode($ajaxResult));
+		}
+		$permissionSettings = $queryResult->fetch_all(MYSQLI_ASSOC);
+		$count = count($permissionSettings);
+		$ajaxResult["permissionSettings"] = array();
+		for ($i = 0; $i < $count; ++$i) {
+			$ajaxResult["permissionSettings"][$permissionSettings[$i]["permissionName"]] = $permissionSettings[$i];
+		}
 	}
 	else {
 		# indicate if errors occur
