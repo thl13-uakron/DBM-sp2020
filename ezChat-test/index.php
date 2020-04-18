@@ -664,7 +664,7 @@
 
 		element.className = "padded bottomMargin";
 		element.innerHTML = `
-		Who can `+permissionInfo["descriptor"] + (isChannelPermission ? " this channel" : (permissionInfo["channelSpecific"] ? " this room" : "")) +`?
+		Who can `+permissionInfo["descriptor"] + (isChannelPermission ? " this channel" : (Number(permissionInfo["channelSpecific"]) ? " this room" : "")) +`?
 		<br />
 		`;
 
