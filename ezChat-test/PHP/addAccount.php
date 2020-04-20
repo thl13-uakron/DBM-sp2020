@@ -50,7 +50,22 @@ else {
 	$ajaxResult["sqlConnectSuccess"] = false;
 }
 
-# return data
-echo json_encode($ajaxResult);
+// Validate data types for ajaxResult
+function validateData(el) {
+    if (gettype(el["userID"]) != string) {
+        return false;
+    }
+    else if (gettype["querySuccess"] != true){
+        return false;
+    }
+    else {
+        return true; 
+    }     
+}
+
+# return data if data types are valid
+if (validateData(ajaxResult)){
+    echo json_encode($ajaxResult);
+}
 
 ?>
