@@ -1636,7 +1636,7 @@
 				.catch(error => console.log(error));
 			}
 		});
-		parent.addEventListener("keyup", function() {
+		parent.addEventListener("keyup", function(e) {
 			// check if input fields are valid
 			if (usernameInput.value.length > 0 && passwordInput.value.length > 0 && confirmPassword.value == passwordInput.value) {
 				signupGoButton.disabled = false;
