@@ -2,7 +2,11 @@ use ezChat;
 
 create table Users(
 	userID integer primary key,
-	screenName varchar(32) not null
+	screenName varchar(32) not null,
+	lastNameChange dateTime default null,
+
+	check (userID > 0),
+	check (length(screenName) > 0)
 );
 create table Accounts(
 	userID integer primary key,
@@ -11,7 +15,9 @@ create table Accounts(
 	Email varchar(64),
 	registrationDate dateTime not null,
     
-	foreign key (userID) references Users(userID)
+	foreign key (userID) references Users(userID) on delete cascade,
+	check (length(accountName) > 0),
+	check (length(password) > 0)
 );
 # Users includes all people posting on the site, including guests, while Accounts comprises the subset of Users who are registered
 
@@ -22,10 +28,13 @@ create table Rooms(
 	browsable boolean not null,
 	public boolean not null,
 	password varchar(64),
-	creatorID int not null,
+	creatorID int,
 	creationDate dateTime not null,
+	editTime dateTime default null,
 
-	Foreign key (creatorID) references Users(userID)
+	Foreign key (creatorID) references Users(userID) on delete set null,
+	check (roomID > 0),
+	check (length(roomName) > 0)
 );
 # browsable determines whether the room appears as part of the public list or if it can only be accessed by URL
 # public determines whether the room can be entered by people who have not been granted explicit permission
@@ -36,11 +45,14 @@ create table Channels(
 	channelName varchar(24) not null,
 	description varchar(64) not null,
 	roomID integer,
-	creatorID int not null,
+	creatorID int,
 	creationDate dateTime not null,
+	editTime dateTime default null,
 	
-	Foreign key (roomID) references Rooms(roomID),
-	Foreign key (creatorID) references Users(userID)
+	Foreign key (roomID) references Rooms(roomID) on delete cascade,
+	Check (channelID > 0),
+	Check (length(channelName) > 0)
+	Foreign key (creatorID) references Users(userID) on delete set null
 );
 # The roomID is set to null for Direct Message channels, which contain posts intended to be viewed by only a specific user or group of users
 
@@ -48,81 +60,126 @@ create table DMs(
 	channelID integer not null,
 	userID integer not null,
 
-	Foreign key (channelID) references Channels(channelID),
-	Foreign key (userID) references Users(userID)
+	Foreign key (channelID) references Channels(channelID) on delete cascade,
+	Foreign key (userID) references Users(userID) on delete cascade
 );
 # Like in Discord, direct message channels follow the same format as regular channels, but they’re independent of rooms and can only be accessed by users who’ve been added to them, as is tracked in the DMs table
 
 create table Messages(
 	messageID integer primary key,
 	channelID integer not null,
-	userID integer not null,
+	userID integer,
 	content varchar(512) not null,
 	sendTime dateTime not null,
+	editTime dateTime default null,
 
-	Foreign key (channelID) references Channels(channelID),
-	Foreign key (userID) references Users(UserID)
+	Foreign key (channelID) references Channels(channelID) on delete cascade,
+	Foreign key (userID) references Users(UserID) on delete set null,
+	check (messageID > 0),
+	check (length(content) > 0),
+	check (editTime > sendTime or editTime is null)
 );
 
-# Everything below this comment hasn't been added to the db yet
-
-create table PunishmentIndex(
-	punishmentID integer primary key,
-	punishmentName varchar(16) not null
-);
-create table Punishments(
-	giverID integer not null,
-	receiverID integer not null,
-	punishmentID integer not null,
-	channelID integer,
-	roomID integer,
-	timeGiven dateTime not null,
-	length integer,
-	reason varchar(64),
-
-	Foreign key (giverID) references Users(userID),
-	Foreign key (receiverID) references Users(userID),
-	Foreign key (punishmentID) references Punishments(punishmentID),
-	Foreign key (channelID) references Channels(channelID),
-	Foreign key (roomID) references Rooms(roomID),
-	Check (length > 0)
-);
-
-create table UserLabelIndex(
-	userLabelID integer primary key,
-	labelName varchar(16) not null,
-	implicit boolean not null
-);
-create table UserLabels(
+create table Sessions(
+	sessionID integer primary key,
 	userID integer not null,
-	userLabelID integer not null,
-	roomID integer,
 
-	Foreign key (userID) references Users(userID),
-	Foreign key (userLabelID) references UserLabelIndex(userLabelID),
-	Foreign key (roomID) references Rooms(roomID)
+	foreign key (userID) references Users(userID) on delete cascade
 );
+
+create table ChannelVisits(
+	userID integer not null,
+	channelID integer not null,
+	updateTime dateTime not null,
+
+	foreign key (userID) references Users(userID) on delete cascade,
+	foreign key (channelID) references Channels(channelID) on delete cascade,
+	primary key (userID, channelID)
+);
+
+create table DeletedMessages(
+	messageID integer not null,
+	channelID integer references Channels(channelID) on delete cascade,
+	senderID integer references Users(userID) on delete set null,
+	deleterID integer references Users(userID) on delete set null,
+	content varchar(512) not null,
+	sendTime dateTime not null,
+	deleteTime dateTime not null
+);
+
+create table DeletedRooms(
+	roomID integer not null,
+	deleteTime dateTime not null
+);
+
+create table DeletedChannels(
+	channelID integer not null,
+	roomID integer,
+	deleteTime dateTime not null
+);
+
+create table Moderators(
+	userID integer not null,
+	roomID integer not null,
+	rank integer,
+	appointmentTime dateTime not null,
+
+	foreign key (userID) references Users(userID) on delete cascade,
+	foreign key (roomID) references Rooms(roomID) on delete cascade, 
+	primary key(userID, roomID)
+);
+
+create table PermissionValues(
+	value integer primary key,
+	description varchar(40),
+
+	check (`value` > 0)
+);
+insert into PermissionValues(value, description) values 
+	(1, 'Everyone'),
+	(2, 'Registered users only'),
+	(3, 'Moderators and administrators only'),
+	(4, 'Administrators only');
 
 create table PermissionIndex(
 	permissionID integer primary key,
-	permissionName varchar(16) not null
+	permissionName varchar(24) unique not null,
+	descriptor varchar(80) not null,
+	defaultVal integer references PermissionValues(value),
+	minVal integer references PermissionValues(value),
+	maxVal integer references PermissionValues(value),
+	channelSpecific boolean not null,
+
+	check (permissionID > 0)
 );
-create table Permissions(
+insert into PermissionIndex(permissionID, permissionName, descriptor, defaultVal, minVal, maxVal, channelSpecific) values
+	(1, 'canEnter', 'can enter', 1, 1, 3, 1),
+	(2, 'canPostMessages', 'can post messages in', 1, 1, 4, 1),
+	(3, 'canEditMessages', 'can edit their own messages in', 2, 1, 4, 1),
+	(4, 'canDeleteOwnMessages', 'can delete their own messages in', 2, 1, 4, 1),
+	(5, 'canDeleteUserMessages', 'can delete messages posted by any non-moderator in', 3, 2, 4, 1),
+	(6, 'canMuteUsers', 'can mute and unmute users in', 3, 2, 4, 1),
+	(7, 'canAddChannel', 'can create and configure new channels', 3, 2, 4, 0),
+	(8, 'canDeleteChannels', 'can delete channels created by other users', 4, 2, 4, 0),
+	(9, 'canEditChannelSettings', 'can configure settings and permissions for channels created by other users', 4, 2, 4, 0),
+	(10, 'canAppointModerators', 'can appoint and remove users as moderators', 4, 3, 4, 0),
+	(11, 'canAppointAdministrators', 'can appoint and remove users as administrators', 4, 4, 4, 0),
+	(12, 'canEditRoomSettings', 'can configure settings and permissions for this room', 4, 3, 4, 0),
+	(13, 'canDeleteRoom', 'can delete this room', 4, 4, 4, 0);
+
+create table PermissionSettings(
+	permissionID integer not null,
 	roomID integer,
 	channelID integer,
-	userLabelID integer,
-	userID integer,
-	permissionID integer not null,
-	permissionValue integer not null,
+	permissionValue integer,
+	setTime dateTime,
 
-	Foreign key (roomID) references Rooms(roomID),
-	Foreign key (channelID) references Channels(channelID),
-	Foreign key (userLabelID) references UserLabelIndex(userLabelID),
-	Foreign key (userID) references Users(userID),
-	Foreign key (permissionID) references PermissionIndex(permissionID),
+	foreign key (permissionID) references PermissionIndex(permissionID) on delete cascade,
+	foreign key (roomID) references Rooms(roomID) on delete cascade,
+	foreign key (channelID) references Channels(channelID) on delete cascade,
+	foreign key (permissionValue) references PermissionValues(value) on delete cascade,
 
-	Unique(roomID, permissionID),
-	Unique(channelID, permissionID),
-	Unique(userLabelID, permissionID),
-	Unique(userID, permissionID)
+	unique key roomSetting (permissionID, roomID),
+	unique key channelSetting (permissionID, channelID),
+	check(roomID is null or channelID is null)
 );
