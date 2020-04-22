@@ -594,6 +594,8 @@
 								break;
 							}
 						}
+						cachedMessages[deletedChannels[i]["channelID"]] = null;
+						channelPermissions[deletedChannels[i]["channelID"]] = null;
 					}
 				}
 
@@ -832,7 +834,7 @@
 			showPermissionSettingElement(channelPermissions[channelID][i]);
 		}
 
-		if (document.getElementById("channel" + channelID).dataset.creatorID == userID || hasPermission("canDeleteChannels")) {
+		if (cachedRoomInfo[roomID]["channelList"].length > 1 && (document.getElementById("channel" + channelID).dataset.creatorID == userID || hasPermission("canDeleteChannels"))) {
 			var deleteChannelButton = document.createElement("button");
 			deleteChannelButton.innerHTML = "Delete";
 			deleteChannelButton.addEventListener("click", function() {
@@ -1443,6 +1445,7 @@
 	function getRoomListUpdates(lastUpdateTime) {
 		roomListUpdateController.abort();
 		roomListUpdateController = new AbortController();
+		var updateTime = lastUpdateTime;
 		fetch("PHP/getRoomListUpdates.php", {
 			method: "POST",
 			body: JSON.stringify({
@@ -1455,6 +1458,8 @@
 		.then(data => {
 			console.log(data);
 			data = JSON.parse(data);
+
+			updateTime = data["updateTime"];
 
 			var updatedRooms = data["updatedRooms"];
 			// check list of new or updated rooms
@@ -1481,19 +1486,29 @@
 			var deletedRooms = data["deletedRooms"];
 			if (deletedRooms) {
 				for (i in deletedRooms) {
-					document.getElementById("room" + deletedRooms[i]["roomID"]).remove();
-					cachedRoomInfo[deletedRooms[i]["roomID"]] = null;
+					if (deletedRooms[i]) {
+						var roomElement = document.getElementById("room" + deletedRooms[i]["roomID"]);
+						if (roomElement) roomElement.remove();
+						if (cachedRoomInfo[deletedRooms[i]["roomID"]]) {
+							var channelList = cachedRoomInfo[deletedRooms[i]["roomID"]]["channelList"];
+							for (i in channelList) {
+								cachedMessages[channelList[i]["channelID"]] = null;
+								channelPermissions[channelList[i]["channelID"]] = null;
+							}
+							cachedRoomInfo[deletedRooms[i]["roomID"]] = null;
+						}
+					}
 				}
 			}
 
 			// get additional updates
-			setTimeout(() => getRoomListUpdates(data["updateTime"]), 1200);
+			setTimeout(() => getRoomListUpdates(updateTime), 1200);
 		})
 		.catch(error => {
 			console.log(error);
 			if (error.name != "AbortError") {
 				// resend request if it timed out but not if it was aborted
-				setTimeout(() => getRoomListUpdates(lastUpdateTime), 1200);
+				setTimeout(() => getRoomListUpdates(updateTime), 1200);
 			}
 		})
 	}
